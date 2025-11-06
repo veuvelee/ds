@@ -67,8 +67,9 @@ def setup_exchange():
         # 首先获取合约规格信息
         print("🔍 获取SOL合约规格...")
         markets = exchange.load_markets()
-        print(markets)
+        #print(markets)
         sol_market = markets[TRADE_CONFIG['symbol']]
+        print(sol_market)
 
         # 获取合约乘数
         contract_size = float(sol_market['contractSize'])
