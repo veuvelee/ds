@@ -522,7 +522,7 @@ def get_current_position():
         positions = exchange.fetch_positions([TRADE_CONFIG['symbol']])
 
         for pos in positions:
-            print(f"symbol: {TRADE_CONFIG['symbol']}")
+            print(f"pos: {pos}")
             if pos['symbol'] == TRADE_CONFIG['symbol']:
                 contracts = float(pos['contracts']) if pos['contracts'] else 0
 
