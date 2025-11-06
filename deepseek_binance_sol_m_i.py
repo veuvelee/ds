@@ -89,7 +89,7 @@ def setup_exchange():
         isolated_position_info = None
 
         for pos in positions:
-            if pos['symbol'] == TRADE_CONFIG['symbol']:
+            if pos['symbol'] == TRADE_CONFIG['symbol'] + ':USDT':
                 contracts = float(pos.get('contracts', 0))
                 mode = pos.get('mgnMode')
 
@@ -523,7 +523,7 @@ def get_current_position():
 
         for pos in positions:
             print(f"pos: {pos}")
-            if pos['symbol'] == TRADE_CONFIG['symbol']:
+            if pos['symbol'] == TRADE_CONFIG['symbol'] + ':USDT':
                 contracts = float(pos['contracts']) if pos['contracts'] else 0
 
                 if contracts > 0:
