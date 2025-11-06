@@ -72,7 +72,7 @@ def setup_exchange():
         print(sol_market)
 
         # 获取合约乘数
-        contract_size = float(sol_market['contractSize'])
+        contract_size = 1
         print(f"✅ 合约规格: 1张 = {contract_size} SOL")
 
         # 存储合约规格到全局配置
