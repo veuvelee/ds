@@ -69,7 +69,7 @@ def setup_exchange():
         markets = exchange.load_markets()
         #print(markets)
         sol_market = markets[TRADE_CONFIG['symbol']]
-        print(sol_market)
+        #print(sol_market)
 
         # 获取合约乘数
         contract_size = 1
