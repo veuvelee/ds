@@ -25,7 +25,7 @@ exchange = ccxt.binance({
 # 交易参数配置
 TRADE_CONFIG = {
     'symbol': 'SOL/USDT',
-    'amount': 0.001,  # 交易数量 (SOL)
+    'amount': 1,  # 交易数量 (SOL)
     'leverage': 10,  # 杠杆倍数
     'timeframe': '15m',  # 使用1小时K线，可改为15m
     'test_mode': False,  # 测试模式
