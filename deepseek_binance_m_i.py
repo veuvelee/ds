@@ -64,10 +64,10 @@ TRADE_CONFIG = {
 def setup_exchange():
     """设置交易所参数 - 强制全仓模式"""
     try:
-
         # 首先获取合约规格信息
         print("🔍 获取SOL合约规格...")
         markets = exchange.load_markets()
+        print(markets)
         sol_market = markets[TRADE_CONFIG['symbol']]
 
         # 获取合约乘数
