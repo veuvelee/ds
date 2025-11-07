@@ -441,7 +441,7 @@ def calculate_intelligent_position(signal_data, price_data, current_position):
         max_usdt = usdt_balance * (config['max_position_ratio'] / 100)
         final_usdt = min(suggested_usdt, max_usdt)
 
-        contract_size = final_usdt / (price_data['price'] * TRADE_CONFIG['contract_size'])
+        contract_size = max(final_usdt / (price_data['price'] * TRADE_CONFIG['contract_size']), 1)
 
         print(f"📊 仓位计算详情:")
         print(f"   - 基础USDT: {base_usdt}")
