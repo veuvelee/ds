@@ -34,7 +34,7 @@ TRADE_CONFIG = {
     'timeframe': '15m',
     'test_mode': False,
     'data_points': 96,
-    'execution_interval': 15,  # 🆕 新增：执行间隔分钟数
+    'execution_interval': 15,  # 执行间隔分钟数
     
     # 优化的止盈止损参数
     'stop_loss_take_profit': {
@@ -46,7 +46,7 @@ TRADE_CONFIG = {
         'low_confidence_tp_multiplier': 0.8,  # 低信心时止盈降低
         'trend_following_sl_buffer': 0.5,  # 趋势跟踪时的止损缓冲
         'volatility_adjusted_sl': True,  # 是否根据波动率调整止损
-        'enable_exchange_sl_tp': True,  # 🆕 是否在交易所设置止盈止损
+        'enable_exchange_sl_tp': True,  # 是否在交易所设置止盈止损
     },
     
     'analysis_periods': {
@@ -75,7 +75,7 @@ trade_stats = {
     'consecutive_same_signals': 0,
     'last_signal': None,
     'position_hold_time': 0,
-    'active_orders': []  # 🆕 跟踪活跃订单
+    'active_orders': []  # 跟踪活跃订单
 }
 
 def setup_exchange():
@@ -468,7 +468,312 @@ def calculate_intelligent_position(signal_data, price_data, current_position):
         contract_size = (base_usdt * TRADE_CONFIG['leverage']) / (price_data['price'] * TRADE_CONFIG.get('contract_size', 1))
         return round(max(contract_size, TRADE_CONFIG.get('min_amount', 1)), 0)
 
-# ... (中间的技术指标计算函数保持不变，为节省篇幅省略) ...
+def calculate_technical_indicators(df):
+    """计算技术指标"""
+    try:
+        # 移动平均线
+        df['sma_5'] = df['close'].rolling(window=5, min_periods=1).mean()
+        df['sma_20'] = df['close'].rolling(window=20, min_periods=1).mean()
+        df['sma_50'] = df['close'].rolling(window=50, min_periods=1).mean()
+
+        # 指数移动平均线
+        df['ema_12'] = df['close'].ewm(span=12).mean()
+        df['ema_26'] = df['close'].ewm(span=26).mean()
+        df['macd'] = df['ema_12'] - df['ema_26']
+        df['macd_signal'] = df['macd'].ewm(span=9).mean()
+        df['macd_histogram'] = df['macd'] - df['macd_signal']
+
+        # 相对强弱指数 (RSI)
+        delta = df['close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+        rs = gain / loss
+        df['rsi'] = 100 - (100 / (1 + rs))
+
+        # 布林带
+        df['bb_middle'] = df['close'].rolling(20).mean()
+        bb_std = df['close'].rolling(20).std()
+        df['bb_upper'] = df['bb_middle'] + (bb_std * 2)
+        df['bb_lower'] = df['bb_middle'] - (bb_std * 2)
+        df['bb_position'] = (df['close'] - df['bb_lower']) / (df['bb_upper'] - df['bb_lower'])
+
+        # 成交量均线
+        df['volume_ma'] = df['volume'].rolling(20).mean()
+        df['volume_ratio'] = df['volume'] / df['volume_ma']
+
+        # 支撑阻力位
+        df['resistance'] = df['high'].rolling(20).max()
+        df['support'] = df['low'].rolling(20).min()
+
+        # 填充NaN值
+        df = df.bfill().ffill()
+
+        return df
+    except Exception as e:
+        print(f"技术指标计算失败: {e}")
+        return df
+
+def get_support_resistance_levels(df, lookback=20):
+    """计算支撑阻力位"""
+    try:
+        recent_high = df['high'].tail(lookback).max()
+        recent_low = df['low'].tail(lookback).min()
+        current_price = df['close'].iloc[-1]
+
+        resistance_level = recent_high
+        support_level = recent_low
+
+        bb_upper = df['bb_upper'].iloc[-1]
+        bb_lower = df['bb_lower'].iloc[-1]
+
+        return {
+            'static_resistance': resistance_level,
+            'static_support': support_level,
+            'dynamic_resistance': bb_upper,
+            'dynamic_support': bb_lower,
+            'price_vs_resistance': ((resistance_level - current_price) / current_price) * 100,
+            'price_vs_support': ((current_price - support_level) / support_level) * 100
+        }
+    except Exception as e:
+        print(f"支撑阻力计算失败: {e}")
+        return {}
+
+def get_sentiment_indicators():
+    """获取情绪指标 - 简洁版本"""
+    try:
+        API_URL = "https://service.cryptoracle.network/openapi/v2/endpoint"
+        API_KEY = "7ad48a56-8730-4238-a714-eebc30834e3e"
+
+        end_time = datetime.now()
+        start_time = end_time - timedelta(hours=4)
+
+        request_body = {
+            "apiKey": API_KEY,
+            "endpoints": ["CO-A-02-01", "CO-A-02-02"],
+            "startTime": start_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "endTime": end_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "timeType": "15m",
+            "token": ["SOL"]
+        }
+
+        headers = {"Content-Type": "application/json", "X-API-KEY": API_KEY}
+        response = requests.post(API_URL, json=request_body, headers=headers)
+
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("code") == 200 and data.get("data"):
+                time_periods = data["data"][0]["timePeriods"]
+
+                for period in time_periods:
+                    period_data = period.get("data", [])
+
+                    sentiment = {}
+                    valid_data_found = False
+
+                    for item in period_data:
+                        endpoint = item.get("endpoint")
+                        value = item.get("value", "").strip()
+
+                        if value:
+                            try:
+                                if endpoint in ["CO-A-02-01", "CO-A-02-02"]:
+                                    sentiment[endpoint] = float(value)
+                                    valid_data_found = True
+                            except (ValueError, TypeError):
+                                continue
+
+                    if valid_data_found and "CO-A-02-01" in sentiment and "CO-A-02-02" in sentiment:
+                        positive = sentiment['CO-A-02-01']
+                        negative = sentiment['CO-A-02-02']
+                        net_sentiment = positive - negative
+
+                        data_delay = int((datetime.now() - datetime.strptime(
+                            period['startTime'], '%Y-%m-%d %H:%M:%S')).total_seconds() // 60)
+
+                        print(f"✅ 使用情绪数据时间: {period['startTime']} (延迟: {data_delay}分钟)")
+
+                        return {
+                            'positive_ratio': positive,
+                            'negative_ratio': negative,
+                            'net_sentiment': net_sentiment,
+                            'data_time': period['startTime'],
+                            'data_delay_minutes': data_delay
+                        }
+
+                print("❌ 所有时间段数据都为空")
+                return None
+
+        return None
+    except Exception as e:
+        print(f"情绪指标获取失败: {e}")
+        return None
+
+def get_market_trend(df):
+    """判断市场趋势"""
+    try:
+        current_price = df['close'].iloc[-1]
+
+        trend_short = "上涨" if current_price > df['sma_20'].iloc[-1] else "下跌"
+        trend_medium = "上涨" if current_price > df['sma_50'].iloc[-1] else "下跌"
+
+        macd_trend = "bullish" if df['macd'].iloc[-1] > df['macd_signal'].iloc[-1] else "bearish"
+
+        if trend_short == "上涨" and trend_medium == "上涨":
+            overall_trend = "强势上涨"
+        elif trend_short == "下跌" and trend_medium == "下跌":
+            overall_trend = "强势下跌"
+        else:
+            overall_trend = "震荡整理"
+
+        return {
+            'short_term': trend_short,
+            'medium_term': trend_medium,
+            'macd': macd_trend,
+            'overall': overall_trend,
+            'rsi_level': df['rsi'].iloc[-1]
+        }
+    except Exception as e:
+        print(f"趋势分析失败: {e}")
+        return {}
+
+def get_sol_ohlcv_enhanced():
+    """增强版：获取SOL K线数据并计算技术指标"""
+    try:
+        ohlcv = exchange.fetch_ohlcv(TRADE_CONFIG['symbol'], TRADE_CONFIG['timeframe'],
+                                     limit=TRADE_CONFIG['data_points'])
+
+        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+
+        df = calculate_technical_indicators(df)
+
+        current_data = df.iloc[-1]
+        previous_data = df.iloc[-2]
+
+        trend_analysis = get_market_trend(df)
+        levels_analysis = get_support_resistance_levels(df)
+
+        return {
+            'price': current_data['close'],
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'high': current_data['high'],
+            'low': current_data['low'],
+            'volume': current_data['volume'],
+            'timeframe': TRADE_CONFIG['timeframe'],
+            'price_change': ((current_data['close'] - previous_data['close']) / previous_data['close']) * 100,
+            'kline_data': df[['timestamp', 'open', 'high', 'low', 'close', 'volume']].tail(10).to_dict('records'),
+            'technical_data': {
+                'sma_5': current_data.get('sma_5', 0),
+                'sma_20': current_data.get('sma_20', 0),
+                'sma_50': current_data.get('sma_50', 0),
+                'rsi': current_data.get('rsi', 0),
+                'macd': current_data.get('macd', 0),
+                'macd_signal': current_data.get('macd_signal', 0),
+                'macd_histogram': current_data.get('macd_histogram', 0),
+                'bb_upper': current_data.get('bb_upper', 0),
+                'bb_lower': current_data.get('bb_lower', 0),
+                'bb_position': current_data.get('bb_position', 0),
+                'volume_ratio': current_data.get('volume_ratio', 0)
+            },
+            'trend_analysis': trend_analysis,
+            'levels_analysis': levels_analysis,
+            'full_data': df
+        }
+    except Exception as e:
+        print(f"获取增强K线数据失败: {e}")
+        return None
+
+def generate_technical_analysis_text(price_data):
+    """生成技术分析文本"""
+    if 'technical_data' not in price_data:
+        return "技术指标数据不可用"
+
+    tech = price_data['technical_data']
+    trend = price_data.get('trend_analysis', {})
+    levels = price_data.get('levels_analysis', {})
+
+    def safe_float(value, default=0):
+        return float(value) if value and pd.notna(value) else default
+
+    analysis_text = f"""
+    【技术指标分析】
+    📈 移动平均线:
+    - 5周期: {safe_float(tech['sma_5']):.2f} | 价格相对: {(price_data['price'] - safe_float(tech['sma_5'])) / safe_float(tech['sma_5']) * 100:+.2f}%
+    - 20周期: {safe_float(tech['sma_20']):.2f} | 价格相对: {(price_data['price'] - safe_float(tech['sma_20'])) / safe_float(tech['sma_20']) * 100:+.2f}%
+    - 50周期: {safe_float(tech['sma_50']):.2f} | 价格相对: {(price_data['price'] - safe_float(tech['sma_50'])) / safe_float(tech['sma_50']) * 100:+.2f}%
+
+    🎯 趋势分析:
+    - 短期趋势: {trend.get('short_term', 'N/A')}
+    - 中期趋势: {trend.get('medium_term', 'N/A')}
+    - 整体趋势: {trend.get('overall', 'N/A')}
+    - MACD方向: {trend.get('macd', 'N/A')}
+
+    📊 动量指标:
+    - RSI: {safe_float(tech['rsi']):.2f} ({'超买' if safe_float(tech['rsi']) > 70 else '超卖' if safe_float(tech['rsi']) < 30 else '中性'})
+    - MACD: {safe_float(tech['macd']):.4f}
+    - 信号线: {safe_float(tech['macd_signal']):.4f}
+
+    🎚️ 布林带位置: {safe_float(tech['bb_position']):.2%} ({'上部' if safe_float(tech['bb_position']) > 0.7 else '下部' if safe_float(tech['bb_position']) < 0.3 else '中部'})
+
+    💰 关键水平:
+    - 静态阻力: {safe_float(levels.get('static_resistance', 0)):.2f}
+    - 静态支撑: {safe_float(levels.get('static_support', 0)):.2f}
+    """
+    return analysis_text
+
+def get_current_position():
+    """获取当前持仓情况 - BINANCE版本"""
+    try:
+        positions = exchange.fetch_positions([TRADE_CONFIG['symbol']])
+
+        for pos in positions:
+            if pos['symbol'] == TRADE_CONFIG['symbol'] + ':USDT':
+                contracts = float(pos['contracts']) if pos['contracts'] else 0
+
+                if contracts > 0:
+                    return {
+                        'side': pos['side'],
+                        'size': contracts,
+                        'entry_price': float(pos['entryPrice']) if pos['entryPrice'] else 0,
+                        'unrealized_pnl': float(pos['unrealizedPnl']) if pos['unrealizedPnl'] else 0,
+                        'leverage': float(pos['leverage']) if pos['leverage'] else TRADE_CONFIG['leverage'],
+                        'symbol': pos['symbol']
+                    }
+
+        return None
+
+    except Exception as e:
+        print(f"获取持仓失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+def safe_json_parse(json_str):
+    """安全解析JSON，处理格式不规范的情况"""
+    try:
+        return json.loads(json_str)
+    except json.JSONDecodeError:
+        try:
+            json_str = json_str.replace("'", '"')
+            json_str = re.sub(r'(\w+):', r'"\1":', json_str)
+            json_str = re.sub(r',\s*}', '}', json_str)
+            json_str = re.sub(r',\s*]', ']', json_str)
+            return json.loads(json_str)
+        except json.JSONDecodeError as e:
+            print(f"JSON解析失败，原始内容: {json_str}")
+            print(f"错误详情: {e}")
+            return None
+
+def create_fallback_signal(price_data):
+    """创建备用交易信号"""
+    return {
+        "signal": "HOLD",
+        "reason": "因技术分析暂时不可用，采取保守策略",
+        "stop_loss": price_data['price'] * 0.98,
+        "take_profit": price_data['price'] * 1.02,
+        "confidence": "LOW",
+        "is_fallback": True
+    }
 
 def should_reverse_position(current_position, signal_data, price_data):
     """判断是否应该反转持仓"""
@@ -523,13 +828,184 @@ def should_reverse_position(current_position, signal_data, price_data):
         print(f"🔒 反转条件不足({confirmation_count}/3)，保持现有持仓")
         return False
 
+def analyze_with_deepseek(price_data):
+    """使用DeepSeek分析市场并生成交易信号（优化版）"""
+
+    technical_analysis = generate_technical_analysis_text(price_data)
+
+    kline_text = f"【最近5根{TRADE_CONFIG['timeframe']}K线数据】\n"
+    for i, kline in enumerate(price_data['kline_data'][-5:]):
+        trend = "阳线" if kline['close'] > kline['open'] else "阴线"
+        change = ((kline['close'] - kline['open']) / kline['open']) * 100
+        kline_text += f"K线{i + 1}: {trend} 开盘:{kline['open']:.2f} 收盘:{kline['close']:.2f} 涨跌:{change:+.2f}%\n"
+
+    signal_text = ""
+    if signal_history:
+        last_signal = signal_history[-1]
+        signal_text = f"\n【上次交易信号】\n信号: {last_signal.get('signal', 'N/A')}\n信心: {last_signal.get('confidence', 'N/A')}"
+
+    sentiment_data = get_sentiment_indicators()
+    if sentiment_data:
+        sign = '+' if sentiment_data['net_sentiment'] >= 0 else ''
+        sentiment_text = f"【市场情绪】乐观{sentiment_data['positive_ratio']:.1%} 悲观{sentiment_data['negative_ratio']:.1%} 净值{sign}{sentiment_data['net_sentiment']:.3f}"
+    else:
+        sentiment_text = "【市场情绪】数据暂不可用"
+
+    current_pos = get_current_position()
+    position_text = "无持仓" if not current_pos else f"{current_pos['side']}仓, 数量: {current_pos['size']}, 盈亏: {current_pos['unrealized_pnl']:.2f}USDT"
+    pnl_text = f", 持仓盈亏: {current_pos['unrealized_pnl']:.2f} USDT" if current_pos else ""
+
+    # 优化的提示词
+    prompt = f"""
+    你是一个专业的加密货币交易分析师。请基于以下SOL/USDT {TRADE_CONFIG['timeframe']}周期数据进行分析：
+
+    {kline_text}
+
+    {technical_analysis}
+
+    {signal_text}
+
+    {sentiment_text}
+
+    【当前行情】
+    - 当前价格: ${price_data['price']:,.2f}
+    - 时间: {price_data['timestamp']}
+    - 本K线最高: ${price_data['high']:,.2f}
+    - 本K线最低: ${price_data['low']:,.2f}
+    - 本K线成交量: {price_data['volume']:.2f} SOL
+    - 价格变化: {price_data['price_change']:+.2f}%
+    - 当前持仓: {position_text}{pnl_text}
+
+    【核心交易原则 - 必须严格遵守】
+    1. **趋势持续性优先**: 不要因单根K线或短期波动改变整体趋势判断
+    2. **持仓稳定性**: 除非趋势明确强烈反转，否则保持现有持仓方向
+    3. **反转确认**: 需要至少2-3个技术指标同时确认趋势反转才改变信号
+    4. **预测性思维**: 基于技术形态预测未来1-3个周期的价格走势，而不是仅看当前价格
+
+    【智能止盈止损策略】
+    1. **趋势跟踪止盈**: 在强势趋势中，可以适当提高止盈目标
+    2. **动态止损调整**: 根据波动率和市场状况调整止损位置
+    3. **风险回报比**: 确保止盈/止损比例至少为2:1
+
+    【技术分析权重分配】
+    1. **主要指标** (权重70%): 
+       - 趋势分析(均线排列、MACD趋势)
+       - 支撑阻力位突破
+       - K线形态组合
+    2. **辅助指标** (权重20%):
+       - RSI超买超卖
+       - 布林带位置
+       - 成交量确认
+    3. **情绪指标** (权重10%):
+       - 仅作为验证信号使用
+
+    【持仓管理逻辑】
+    - 现有持仓且趋势延续 → 保持或同方向加仓信号
+    - 趋势明确反转且多重确认 → 及时反向信号  
+    - 窄幅震荡无方向 → HOLD信号
+    - 避免因小幅波动频繁反转持仓
+
+    【信号生成规则】
+    BUY信号条件(满足3条以上):
+    ✓ 价格突破关键阻力位 + 成交量放大
+    ✓ 均线呈多头排列(5>20>50)
+    ✓ MACD金叉且柱状图转正
+    ✓ RSI从超卖区域回升
+
+    SELL信号条件(满足3条以上):
+    ✓ 价格跌破关键支撑位 + 成交量放大  
+    ✓ 均线呈空头排列(5<20<50)
+    ✓ MACD死叉且柱状图转负
+    ✓ RSI从超买区域回落
+
+    HOLD信号条件:
+    ✓ 技术指标矛盾无明确方向
+    ✓ 价格在窄幅区间震荡
+    ✓ 需要更多确认信号
+
+    【重要】基于技术分析做出明确判断，要有预测性思维，避免过度谨慎！
+
+    请用以下JSON格式回复：
+    {{
+        "signal": "BUY|SELL|HOLD",
+        "reason": "详细分析理由(包含趋势判断、技术依据和预测逻辑)",
+        "stop_loss": 具体价格,
+        "take_profit": 具体价格, 
+        "confidence": "HIGH|MEDIUM|LOW"
+    }}
+    """
+
+    try:
+        response = deepseek_client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {"role": "system",
+                 "content": f"您是一位专业的交易员，专注于{TRADE_CONFIG['timeframe']}周期趋势分析和价格预测。请结合技术形态预测未来走势，并严格遵循JSON格式要求。"},
+                {"role": "user", "content": prompt}
+            ],
+            stream=False,
+            temperature=0.1
+        )
+
+        result = response.choices[0].message.content
+        print(f"DeepSeek原始回复: {result}")
+
+        start_idx = result.find('{')
+        end_idx = result.rfind('}') + 1
+
+        if start_idx != -1 and end_idx != 0:
+            json_str = result[start_idx:end_idx]
+            signal_data = safe_json_parse(json_str)
+
+            if signal_data is None:
+                signal_data = create_fallback_signal(price_data)
+        else:
+            signal_data = create_fallback_signal(price_data)
+
+        required_fields = ['signal', 'reason', 'stop_loss', 'take_profit', 'confidence']
+        if not all(field in signal_data for field in required_fields):
+            signal_data = create_fallback_signal(price_data)
+
+        # 更新交易统计
+        global trade_stats
+        if signal_history:
+            last_signal = signal_history[-1]['signal']
+            if signal_data['signal'] == last_signal:
+                trade_stats['consecutive_same_signals'] += 1
+            else:
+                trade_stats['consecutive_same_signals'] = 0
+        else:
+            trade_stats['consecutive_same_signals'] = 1
+            
+        trade_stats['last_signal'] = signal_data['signal']
+
+        signal_data['timestamp'] = price_data['timestamp']
+        signal_history.append(signal_data)
+        if len(signal_history) > 30:
+            signal_history.pop(0)
+
+        signal_count = len([s for s in signal_history if s.get('signal') == signal_data['signal']])
+        total_signals = len(signal_history)
+        print(f"信号统计: {signal_data['signal']} (最近{total_signals}次中出现{signal_count}次)")
+
+        if len(signal_history) >= 3:
+            last_three = [s['signal'] for s in signal_history[-3:]]
+            if len(set(last_three)) == 1:
+                print(f"⚠️ 注意：连续3次{signal_data['signal']}信号")
+
+        return signal_data
+
+    except Exception as e:
+        print(f"DeepSeek分析失败: {e}")
+        return create_fallback_signal(price_data)
+
 def execute_intelligent_trade(signal_data, price_data):
     """执行智能交易 - 完整止盈止损逻辑"""
     global position, trade_stats
 
     current_position = get_current_position()
 
-    # 🆕 使用智能反转判断
+    # 使用智能反转判断
     if current_position and signal_data['signal'] != 'HOLD':
         current_side = current_position['side']
         signal_side = 'long' if signal_data['signal'] == 'BUY' else 'short' if signal_data['signal'] == 'SELL' else None
@@ -539,7 +1015,7 @@ def execute_intelligent_trade(signal_data, price_data):
                 print(f"🔒 反转条件不满足，保持现有{current_side}仓")
                 return
 
-    # 🆕 智能计算止盈止损
+    # 智能计算止盈止损
     stop_loss, take_profit = calculate_intelligent_stop_loss_take_profit(
         signal_data, price_data, current_position
     )
@@ -630,7 +1106,7 @@ def execute_intelligent_trade(signal_data, price_data):
                 )
                 trade_stats['position_hold_time'] = 0
 
-            # 🆕 设置止盈止损订单
+            # 设置止盈止损订单
             if signal_data['signal'] == 'BUY':
                 set_exchange_stop_loss_take_profit(signal_data, position_size, current_position)
 
@@ -696,7 +1172,7 @@ def execute_intelligent_trade(signal_data, price_data):
                 )
                 trade_stats['position_hold_time'] = 0
 
-            # 🆕 设置止盈止损订单
+            # 设置止盈止损订单
             if signal_data['signal'] == 'SELL':
                 set_exchange_stop_loss_take_profit(signal_data, position_size, current_position)
 
@@ -704,7 +1180,7 @@ def execute_intelligent_trade(signal_data, price_data):
             print("建议观望，不执行交易")
             if current_position:
                 trade_stats['position_hold_time'] += 1  # 持仓时间增加
-            # 🆕 HOLD时也检查是否需要更新止盈止损
+            # HOLD时也检查是否需要更新止盈止损
             if current_position and trade_stats['active_orders']:
                 print("🔍 检查现有止盈止损订单是否需要更新...")
                 # 这里可以添加逻辑来检查是否需要调整现有的止盈止损
@@ -748,7 +1224,24 @@ def execute_intelligent_trade(signal_data, price_data):
         import traceback
         traceback.print_exc()
 
-# ... (其他辅助函数保持不变，为节省篇幅省略) ...
+def analyze_with_deepseek_with_retry(price_data, max_retries=2):
+    """带重试的DeepSeek分析"""
+    for attempt in range(max_retries):
+        try:
+            signal_data = analyze_with_deepseek(price_data)
+            if signal_data and not signal_data.get('is_fallback', False):
+                return signal_data
+
+            print(f"第{attempt + 1}次尝试失败，进行重试...")
+            time.sleep(1)
+
+        except Exception as e:
+            print(f"第{attempt + 1}次尝试异常: {e}")
+            if attempt == max_retries - 1:
+                return create_fallback_signal(price_data)
+            time.sleep(1)
+
+    return create_fallback_signal(price_data)
 
 def check_active_orders():
     """检查当前活跃的止盈止损订单状态"""
@@ -777,6 +1270,35 @@ def check_active_orders():
         print(f"检查活跃订单失败: {e}")
         return []
 
+def wait_for_next_period():
+    """等待到下一个执行周期"""
+    interval = TRADE_CONFIG['execution_interval']
+    now = datetime.now()
+    current_minute = now.minute
+    current_second = now.second
+
+    # 计算下一个执行时间
+    next_period_minute = ((current_minute // interval) + 1) * interval
+    if next_period_minute >= 60:
+        next_period_minute = 0
+
+    if next_period_minute > current_minute:
+        minutes_to_wait = next_period_minute - current_minute
+    else:
+        minutes_to_wait = 60 - current_minute + next_period_minute
+
+    seconds_to_wait = minutes_to_wait * 60 - current_second
+
+    display_minutes = minutes_to_wait - 1 if current_second > 0 else minutes_to_wait
+    display_seconds = 60 - current_second if current_second > 0 else 0
+
+    if display_minutes > 0:
+        print(f"🕒 等待 {display_minutes} 分 {display_seconds} 秒到下一个{interval}分钟周期...")
+    else:
+        print(f"🕒 等待 {display_seconds} 秒到下一个{interval}分钟周期...")
+
+    return seconds_to_wait
+
 def trading_bot():
     """主交易机器人函数"""
     # 等待到执行时间
@@ -788,7 +1310,7 @@ def trading_bot():
     print(f"执行时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
 
-    # 🆕 检查当前活跃订单
+    # 检查当前活跃订单
     check_active_orders()
 
     price_data = get_sol_ohlcv_enhanced()
