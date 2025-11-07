@@ -10,7 +10,6 @@ import json
 import requests
 from datetime import datetime, timedelta
 
-# binance +带市场情绪+指标版本 + 优化止盈止损逻辑
 # deepseek 优化版本 2025/11/07 20:28
 
 load_dotenv()
