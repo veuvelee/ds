@@ -34,7 +34,7 @@ TRADE_CONFIG = {
     'timeframe': '15m',
     'test_mode': False,
     'data_points': 96,
-    'execution_interval': 15,  # 执行间隔分钟数
+    'execution_interval': 5,  # 执行间隔分钟数
     
     # 优化的止盈止损参数
     'stop_loss_take_profit': {
