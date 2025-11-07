@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import os
 import time
 import schedule
@@ -85,7 +84,6 @@ def setup_exchange():
         sol_market = markets[TRADE_CONFIG['symbol']]
 
         contract_size = 1
-        print(f"✅ 合约规格: 1张 = {contract_size} SOL")
         print(f"✅ 合约规格: 1张 = {contract_size} SOL")
 
         TRADE_CONFIG['contract_size'] = contract_size
