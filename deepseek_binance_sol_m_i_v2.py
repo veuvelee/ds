@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import time
 import schedule
@@ -10,7 +11,7 @@ import json
 import requests
 from datetime import datetime, timedelta
 
-# deepseek 优化版本 2025/11/07 20:28
+# binance + 带市场情绪 + 指标版本 + 优化止盈止损
 
 load_dotenv()
 
