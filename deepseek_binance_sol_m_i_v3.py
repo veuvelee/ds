@@ -45,7 +45,7 @@ class BinanceSOLTradingBot:
             'symbol': 'SOL/USDT',
             'leverage': 10,  # 🆕 提高杠杆到10倍（合约交易）
             'timeframe': '15m',  # K线周期
-            'execution_interval': 15,  # 执行间隔(分钟)
+            'execution_interval': 3,  # 执行间隔(分钟)
             
             # 数据配置
             'data_points': 96,  # 数据点数量(24小时)
