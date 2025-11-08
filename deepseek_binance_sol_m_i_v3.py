@@ -45,10 +45,10 @@ class BinanceSOLTradingBot:
             'symbol': 'SOL/USDT',
             'leverage': 5,  # 杠杆倍数(SOL波动较大，降低杠杆)
             'timeframe': '15m',  # K线周期
-            'execution_interval': 15,  # 执行间隔(分钟)
+            'execution_interval': 5,  # 执行间隔(分钟)
             
             # 数据配置
-            'data_points': 96,  # 数据点数量(24小时)
+            'data_points': 192,  # 数据点数量(48小时)
             'test_mode': False,  # 测试模式
             
             # SOL特定参数
@@ -69,7 +69,7 @@ class BinanceSOLTradingBot:
             # 智能仓位管理
             'position_management': {
                 'enable_intelligent_position': True,
-                'base_usdt_amount': 50,  # 基础USDT投入(SOL价格较低)
+                'base_usdt_amount': 100,  # 基础USDT投入(SOL价格较低)
                 'high_confidence_multiplier': 1.5,
                 'medium_confidence_multiplier': 1.0,
                 'low_confidence_multiplier': 0.5,
