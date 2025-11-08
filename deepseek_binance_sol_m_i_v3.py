@@ -43,20 +43,20 @@ class BinanceSOLTradingBot:
         self.TRADE_CONFIG = {
             # 交易对配置 - 改为SOL/USDT
             'symbol': 'SOL/USDT',
-            'leverage': 5,  # 杠杆倍数(SOL波动较大，降低杠杆)
+            'leverage': 10,  # 🆕 提高杠杆到10倍（合约交易）
             'timeframe': '15m',  # K线周期
-            'execution_interval': 5,  # 执行间隔(分钟)
+            'execution_interval': 15,  # 执行间隔(分钟)
             
             # 数据配置
-            'data_points': 192,  # 数据点数量(48小时)
+            'data_points': 96,  # 数据点数量(24小时)
             'test_mode': False,  # 测试模式
             
-            # SOL特定参数
+            # 🆕 SOL合约交易参数
             'sol_config': {
-                'base_quantity': 1.0,  # 基础交易数量(SOL个数)
-                'min_quantity': 0.1,   # 最小交易数量
+                'base_quantity': 2.0,  # 🆕 基础交易数量提高到2个SOL
+                'min_quantity': 1.0,   # 🆕 最小交易量1个SOL
                 'price_precision': 3,  # 价格精度
-                'quantity_precision': 2,  # 数量精度
+                'quantity_precision': 1,  # 🆕 数量精度调整为1位小数
             },
             
             # 技术指标周期
@@ -66,23 +66,20 @@ class BinanceSOLTradingBot:
                 'long_term': 96     # 长期趋势
             },
             
-            # 智能仓位管理
+            # 🆕 合约交易仓位管理
             'position_management': {
                 'enable_intelligent_position': True,
-                'base_usdt_amount': 100,  # 基础USDT投入(SOL价格较低)
-                'high_confidence_multiplier': 1.5,
-                'medium_confidence_multiplier': 1.0,
-                'low_confidence_multiplier': 0.5,
-                'max_position_ratio': 0.1,  # 最大仓位比例(10%)
-                'trend_strength_multiplier': 1.2
+                'base_usdt_amount': 200,  # 🆕 基础USDT投入提高到200
+                'max_position_ratio': 0.8,  # 🆕 最大仓位比例提高到80%
+                'trend_strength_multiplier': 2.0
             },
             
-            # 风险管理参数
+            # 🆕 合约交易风险管理
             'risk_management': {
-                'default_stop_loss_ratio': 0.03,   # 默认止损比例3%(SOL波动较大)
-                'default_take_profit_ratio': 0.06, # 默认止盈比例6%
-                'trailing_stop_enabled': False,    # 是否启用移动止损
-                'max_daily_loss_ratio': 0.05       # 最大日亏损比例5%
+                'default_stop_loss_ratio': 0.02,   # 🆕 止损比例2%（合约要更严格）
+                'default_take_profit_ratio': 0.04, # 🆕 止盈比例4%
+                'trailing_stop_enabled': True,     # 🆕 启用移动止损
+                'max_daily_loss_ratio': 0.15       # 🆕 最大日亏损比例15%
             },
             
             # 钉钉通知配置
@@ -264,7 +261,7 @@ class BinanceSOLTradingBot:
 
     def calculate_intelligent_position(self, signal_data, price_data, current_position):
         """
-        🆕 优化版：计算智能仓位大小 - 针对SOL优化
+        🆕 合约交易版：计算智能仓位大小 - 最小1个SOL起
         
         Args:
             signal_data: 信号数据
@@ -293,48 +290,63 @@ class BinanceSOLTradingBot:
                 print("⚠️ 账户USDT余额不足，使用基础仓位")
                 return sol_config['base_quantity']
 
-            # 基础USDT投入
-            base_usdt = config['base_usdt_amount']
-            print(f"💰 可用USDT余额: {usdt_balance:.2f}, 下单基数: {base_usdt} USDT")
+            # 🆕 合约交易基础USDT投入 - 更激进
+            base_usdt = min(config['base_usdt_amount'], usdt_balance * 0.5)  # 不超过余额的50%
+            print(f"💰 可用USDT余额: {usdt_balance:.2f}, 合约基数: {base_usdt:.2f} USDT")
 
-            # 根据信心程度调整
+            # 🆕 合约交易信心倍数 - 更激进
             confidence_multiplier = {
-                'HIGH': config['high_confidence_multiplier'],
-                'MEDIUM': config['medium_confidence_multiplier'],
-                'LOW': config['low_confidence_multiplier']
-            }.get(signal_data.get('confidence', 'MEDIUM'), 1.0)
+                'HIGH': 3.0,    # 高信心3倍
+                'MEDIUM': 2.0,  # 中等信心2倍
+                'LOW': 1.0      # 低信心1倍
+            }.get(signal_data.get('confidence', 'MEDIUM'), 1.5)
 
             # 根据趋势强度调整
             trend = price_data.get('trend_analysis', {}).get('overall', '震荡整理')
             if trend in ['强势上涨', '强势下跌']:
-                trend_multiplier = config['trend_strength_multiplier']
+                trend_multiplier = 2.0  # 强势趋势加倍
             else:
                 trend_multiplier = 1.0
 
-            # 根据RSI状态调整（超买超卖区域减仓）
+            # 🆕 合约交易RSI调整 - 更激进
             rsi = price_data.get('technical_data', {}).get('rsi', 50)
             if isinstance(rsi, (int, float)):
-                if rsi > 75 or rsi < 25:
-                    rsi_multiplier = 0.7
+                if rsi > 85 or rsi < 15:  # 只在极端区域轻微减仓
+                    rsi_multiplier = 0.8
                 else:
-                    rsi_multiplier = 1.0
+                    rsi_multiplier = 1.5  # 正常区域大幅增加仓位
             else:
                 rsi_multiplier = 1.0
 
-            # 计算建议投入USDT金额
-            suggested_usdt = base_usdt * confidence_multiplier * trend_multiplier * rsi_multiplier
+            # 🆕 合约交易信号类型调整
+            signal_type = signal_data.get('signal', 'HOLD')
+            signal_multiplier = {
+                'BUY': 1.0,
+                'SELL': 1.0, 
+                'HOLD': 0.5   # HOLD信号也允许中等仓位
+            }.get(signal_type, 0.5)
 
-            # 风险管理：不超过总资金的指定比例
-            max_usdt = usdt_balance * config['max_position_ratio']
+            # 🆕 计算建议投入USDT金额 - 合约交易更激进
+            suggested_usdt = base_usdt * confidence_multiplier * trend_multiplier * rsi_multiplier * signal_multiplier
+
+            # 🆕 合约交易动态最大仓位比例 - 更激进
+            dynamic_max_ratio = {
+                'HIGH': 0.8,    # 高信心最多80%
+                'MEDIUM': 0.6,  # 中等信心60%
+                'LOW': 0.4      # 低信心40%
+            }.get(signal_data.get('confidence', 'MEDIUM'), 0.5)
+            
+            # 风险管理：不超过总资金的动态比例
+            max_usdt = usdt_balance * dynamic_max_ratio
             final_usdt = min(suggested_usdt, max_usdt)
             
-            # 确保最小投入金额
-            min_usdt = 5  # 最小投入5 USDT
+            # 🆕 合约交易确保最小投入金额 - 大幅提高
+            min_usdt = max(50, usdt_balance * 0.1)  # 最少50USDT或余额的10%
             if final_usdt < min_usdt:
                 final_usdt = min_usdt
-                print(f"⚠️ 投入金额小于最小值，调整为: {final_usdt} USDT")
+                print(f"⚠️ 投入金额小于最小值，调整为: {final_usdt:.2f} USDT")
 
-            # 🆕 优化：计算SOL数量（基于USDT价值和当前价格）
+            # 计算SOL数量
             current_price = price_data.get('price', 0)
             if current_price <= 0:
                 print("❌ 当前价格无效，使用基础仓位")
@@ -343,58 +355,63 @@ class BinanceSOLTradingBot:
             # 公式：SOL数量 = 投入USDT / 当前SOL价格
             sol_quantity = final_usdt / current_price
             
-            # 🆕 修复：根据步长精度调整数量
-            amount_step = self.TRADE_CONFIG.get('amount_step', 0.001)  # 默认0.001
-            
-            # 根据步长调整数量
+            # 🆕 根据步长调整数量
+            amount_step = self.TRADE_CONFIG.get('amount_step', 0.001)
             if amount_step > 0:
-                # 计算最接近步长倍数的数量
+                # 计算最接近步长倍数的数量（向上取整到步长倍数）
                 sol_quantity = (sol_quantity // amount_step) * amount_step
-                # 确保不小于最小交易量
-                min_quantity = sol_config['min_quantity']
-                if sol_quantity < min_quantity:
-                    sol_quantity = min_quantity
+                # 🆕 如果计算小于1，强制为1
+                if sol_quantity < 1:
+                    sol_quantity = 1.0
             else:
-                # 如果步长无效，使用默认精度
-                sol_quantity = round(sol_quantity, 3)  # 默认3位小数
+                sol_quantity = round(sol_quantity, 3)
 
-            # 确保最小交易量
-            min_quantity = sol_config['min_quantity']
+            # 🆕 合约交易确保最小交易量 - 最少1个SOL
+            min_quantity = max(sol_config['min_quantity'], 1.0)  # 最少1个SOL
             if sol_quantity < min_quantity:
                 sol_quantity = min_quantity
-                print(f"⚠️ 仓位小于最小值，调整为: {sol_quantity} SOL")
+                print(f"⚠️ 仓位小于最小值，强制调整为: {sol_quantity:.1f} SOL")
                 
-            # 确保不超过最大仓位限制（基于账户余额）
-            max_quantity_from_balance = (usdt_balance * config['max_position_ratio']) / current_price
-            # 同样根据步长调整最大数量
+            # 🆕 确保不超过最大仓位限制 - 使用动态比例
+            max_quantity_from_balance = (usdt_balance * dynamic_max_ratio) / current_price
+            # 根据步长调整最大数量
             if amount_step > 0:
                 max_quantity_from_balance = (max_quantity_from_balance // amount_step) * amount_step
             
+            # 🆕 确保最大数量不小于最小数量
+            if max_quantity_from_balance < min_quantity:
+                max_quantity_from_balance = min_quantity
+                
             if sol_quantity > max_quantity_from_balance:
                 sol_quantity = max_quantity_from_balance
-                print(f"⚠️ 仓位超过最大限制，调整为: {sol_quantity} SOL")
+                print(f"⚠️ 仓位超过最大限制，调整为: {sol_quantity:.1f} SOL")
 
-            print(f"📊 仓位计算详情:")
-            print(f"   - 基础USDT: {base_usdt}")
+            print(f"📊 合约仓位计算详情:")
+            print(f"   - 账户余额: {usdt_balance:.2f} USDT")
+            print(f"   - 合约基数: {base_usdt:.2f} USDT")
             print(f"   - 信心倍数: {confidence_multiplier}")
             print(f"   - 趋势倍数: {trend_multiplier}")
             print(f"   - RSI倍数: {rsi_multiplier}")
+            print(f"   - 信号倍数: {signal_multiplier}")
+            print(f"   - 动态最大比例: {dynamic_max_ratio:.0%}")
             print(f"   - 建议USDT: {suggested_usdt:.2f}")
             print(f"   - 最终USDT: {final_usdt:.2f}")
             print(f"   - 当前SOL价格: {current_price:.3f}")
-            print(f"   - 数量步长: {amount_step}")
-            print(f"   - 计算数量: {sol_quantity:.3f} SOL")
-            print(f"   - 最大允许数量: {max_quantity_from_balance:.3f} SOL")
+            print(f"   - 计算数量: {sol_quantity:.1f} SOL")
+            print(f"   - 最大允许数量: {max_quantity_from_balance:.1f} SOL")
 
-            print(f"🎯 最终仓位: {final_usdt:.2f} USDT → {sol_quantity:.3f} SOL")
+            # 🆕 计算实际杠杆
+            actual_leverage = (sol_quantity * current_price) / (final_usdt / self.TRADE_CONFIG['leverage'])
+            print(f"🎯 最终仓位: {final_usdt:.2f} USDT → {sol_quantity:.1f} SOL (约{final_usdt/usdt_balance*100:.0f}%仓位, 实际杠杆: {actual_leverage:.1f}x)")
+            
             return sol_quantity
 
         except Exception as e:
             print(f"❌ 仓位计算失败，使用基础仓位: {e}")
             import traceback
-            traceback.print_exc()  # 打印详细错误信息
-            # 紧急备用计算
-            return sol_config['base_quantity']
+            traceback.print_exc()
+            # 紧急备用计算 - 最少1个SOL
+            return max(sol_config['base_quantity'], 1.0)
 
     def calculate_technical_indicators(self, df):
         """
@@ -632,7 +649,7 @@ class BinanceSOLTradingBot:
             positions = self.exchange.fetch_positions([self.TRADE_CONFIG['symbol']])
             
             for pos in positions:
-                print(pos)
+                #print(pos)
                 if pos['symbol'] == self.TRADE_CONFIG['symbol'] + ':USDT':
                     contracts = float(pos['contracts']) if pos['contracts'] else 0
                     
