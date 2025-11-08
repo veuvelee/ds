@@ -5,6 +5,3 @@ schedule
 python-dotenv
 requests
 urllib3
-hmac
-hashlib
-base64
