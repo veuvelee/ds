@@ -609,7 +609,7 @@ class BinanceSOLTradingBot:
             
             for pos in positions:
                 print(pos)
-                if pos['symbol'] == self.TRADE_CONFIG['symbol']:
+                if pos['symbol'] == self.TRADE_CONFIG['symbol'] + ':USDT':
                     contracts = float(pos['contracts']) if pos['contracts'] else 0
                     
                     if contracts > 0:
@@ -619,7 +619,7 @@ class BinanceSOLTradingBot:
                             'entry_price': float(pos['entryPrice']) if pos['entryPrice'] else 0,
                             'unrealized_pnl': float(pos['unrealizedPnl']) if pos['unrealizedPnl'] else 0,
                             'leverage': float(pos['leverage']) if pos['leverage'] else self.TRADE_CONFIG['leverage'],
-                            'symbol': pos['symbol']
+                            'symbol': self.TRADE_CONFIG['symbol']
                         }
                         
             return None
