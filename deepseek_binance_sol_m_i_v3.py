@@ -933,14 +933,14 @@ class BinanceSOLTradingBot:
                 signal_data = self.create_fallback_signal(price_data)
 
             # 🆕 信号后处理 - 减少过度HOLD
-            if signal_data['signal'] == 'HOLD' and signal_data.get('confidence') == 'LOW':
-                # 如果是低信心HOLD，重新评估
-                current_trend = price_data['trend_analysis'].get('overall', '')
-                if current_trend in ['强势上涨', '强势下跌']:
-                    # 在强势趋势中，倾向于跟随趋势
-                    signal_data['signal'] = 'BUY' if current_trend == '强势上涨' else 'SELL'
-                    signal_data['confidence'] = 'MEDIUM'
-                    signal_data['reason'] += f" | 趋势跟踪覆盖低信心HOLD: {current_trend}"
+            # if signal_data['signal'] == 'HOLD' and signal_data.get('confidence') == 'LOW':
+            #     # 如果是低信心HOLD，重新评估
+            #     current_trend = price_data['trend_analysis'].get('overall', '')
+            #     if current_trend in ['强势上涨', '强势下跌']:
+            #         # 在强势趋势中，倾向于跟随趋势
+            #         signal_data['signal'] = 'BUY' if current_trend == '强势上涨' else 'SELL'
+            #         signal_data['confidence'] = 'MEDIUM'
+            #         signal_data['reason'] += f" | 趋势跟踪覆盖低信心HOLD: {current_trend}"
 
             # 保存信号到历史记录
             signal_data['timestamp'] = price_data['timestamp']
