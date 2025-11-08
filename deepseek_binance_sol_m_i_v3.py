@@ -109,7 +109,7 @@ class BinanceSOLTradingBot:
                     'defaultType': 'future',  # 币安永续合约
                 },
                 'apiKey': os.getenv('BINANCE_API_KEY'),
-                'secret': os.getenv('BINANCE_SECRET_KEY'),
+                'secret': os.getenv('BINANCE_SECRET'),
                 'sandbox': self.TRADE_CONFIG['test_mode'],  # 测试模式
             })
             
