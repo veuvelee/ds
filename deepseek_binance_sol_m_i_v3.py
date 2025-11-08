@@ -893,8 +893,8 @@ class BinanceSOLTradingBot:
         {{
             "signal": "BUY|SELL|HOLD",
             "reason": "基于量化策略的具体分析，列出满足的条件和技术依据",
-            "stop_loss": 具体价格,
-            "take_profit": 具体价格, 
+            "stop_loss": 具体价格float,
+            "take_profit": 具体价格float, 
             "confidence": "HIGH|MEDIUM|LOW"
         }}
         """
