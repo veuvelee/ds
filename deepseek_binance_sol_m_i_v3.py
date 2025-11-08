@@ -146,25 +146,31 @@ class BinanceSOLTradingBot:
             # 🆕 优化：币安contractSize为None，使用自定义逻辑
             self.TRADE_CONFIG['min_amount'] = market['limits']['amount']['min']
             
-            # 🆕 更安全的精度获取
-            price_precision = market.get('precision', {}).get('price', 3)
-            amount_precision = market.get('precision', {}).get('amount', 2)
-
-            print(f"price_precision:{price_precision}")
-            print(f"amount_precision:{amount_precision}")
+            # 🆕 修复：币安返回的是步长（step size），不是小数位数
+            precision_info = market.get('precision', {})
             
-            # 如果精度信息不完整，使用默认值
-            if price_precision is None:
-                price_precision = 3
-            if amount_precision is None:
-                amount_precision = 2
+            # 价格步长处理
+            price_step = precision_info.get('price')
+            if price_step is None:
+                price_step = 0.01  # 默认价格步长
+            self.TRADE_CONFIG['price_step'] = float(price_step)
                 
+            # 数量步长处理
+            amount_step = precision_info.get('amount')
+            if amount_step is None:
+                amount_step = 0.001  # 默认数量步长
+            self.TRADE_CONFIG['amount_step'] = float(amount_step)
+            
+            # 🆕 计算对应的小数位数（用于显示）
+            price_precision = len(str(price_step).split('.')[-1]) if '.' in str(price_step) else 0
+            amount_precision = len(str(amount_step).split('.')[-1]) if '.' in str(amount_step) else 0
+            
             self.TRADE_CONFIG['price_precision'] = price_precision
             self.TRADE_CONFIG['amount_precision'] = amount_precision
             
             print(f"📏 最小交易量: {self.TRADE_CONFIG['min_amount']} SOL")
-            print(f"🎯 价格精度: {self.TRADE_CONFIG['price_precision']}")
-            print(f"🎯 数量精度: {self.TRADE_CONFIG['amount_precision']}")
+            print(f"🎯 价格步长: {self.TRADE_CONFIG['price_step']} (对应{price_precision}位小数)")
+            print(f"🎯 数量步长: {self.TRADE_CONFIG['amount_step']} (对应{amount_precision}位小数)")
             
             # 设置杠杆
             print(f"⚙️ 设置杠杆: {self.TRADE_CONFIG['leverage']}x")
@@ -337,9 +343,20 @@ class BinanceSOLTradingBot:
             # 公式：SOL数量 = 投入USDT / 当前SOL价格
             sol_quantity = final_usdt / current_price
             
-            # 精度处理
-            amount_precision = self.TRADE_CONFIG.get('amount_precision', 2)
-            sol_quantity = round(sol_quantity, amount_precision)
+            # 🆕 修复：根据步长精度调整数量
+            amount_step = self.TRADE_CONFIG.get('amount_step', 0.001)  # 默认0.001
+            
+            # 根据步长调整数量
+            if amount_step > 0:
+                # 计算最接近步长倍数的数量
+                sol_quantity = (sol_quantity // amount_step) * amount_step
+                # 确保不小于最小交易量
+                min_quantity = sol_config['min_quantity']
+                if sol_quantity < min_quantity:
+                    sol_quantity = min_quantity
+            else:
+                # 如果步长无效，使用默认精度
+                sol_quantity = round(sol_quantity, 3)  # 默认3位小数
 
             # 确保最小交易量
             min_quantity = sol_config['min_quantity']
@@ -349,7 +366,10 @@ class BinanceSOLTradingBot:
                 
             # 确保不超过最大仓位限制（基于账户余额）
             max_quantity_from_balance = (usdt_balance * config['max_position_ratio']) / current_price
-            max_quantity_from_balance = round(max_quantity_from_balance, amount_precision)
+            # 同样根据步长调整最大数量
+            if amount_step > 0:
+                max_quantity_from_balance = (max_quantity_from_balance // amount_step) * amount_step
+            
             if sol_quantity > max_quantity_from_balance:
                 sol_quantity = max_quantity_from_balance
                 print(f"⚠️ 仓位超过最大限制，调整为: {sol_quantity} SOL")
@@ -362,6 +382,7 @@ class BinanceSOLTradingBot:
             print(f"   - 建议USDT: {suggested_usdt:.2f}")
             print(f"   - 最终USDT: {final_usdt:.2f}")
             print(f"   - 当前SOL价格: {current_price:.3f}")
+            print(f"   - 数量步长: {amount_step}")
             print(f"   - 计算数量: {sol_quantity:.3f} SOL")
             print(f"   - 最大允许数量: {max_quantity_from_balance:.3f} SOL")
 
