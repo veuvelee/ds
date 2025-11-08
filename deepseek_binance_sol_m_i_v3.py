@@ -608,6 +608,7 @@ class BinanceSOLTradingBot:
             positions = self.exchange.fetch_positions([self.TRADE_CONFIG['symbol']])
             
             for pos in positions:
+                print(pos)
                 if pos['symbol'] == self.TRADE_CONFIG['symbol']:
                     contracts = float(pos['contracts']) if pos['contracts'] else 0
                     
