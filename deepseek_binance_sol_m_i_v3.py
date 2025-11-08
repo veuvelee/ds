@@ -145,8 +145,19 @@ class BinanceSOLTradingBot:
             
             # 🆕 优化：币安contractSize为None，使用自定义逻辑
             self.TRADE_CONFIG['min_amount'] = market['limits']['amount']['min']
-            self.TRADE_CONFIG['price_precision'] = market['precision']['price']
-            self.TRADE_CONFIG['amount_precision'] = market['precision']['amount']
+            
+            # 🆕 更安全的精度获取
+            price_precision = market.get('precision', {}).get('price', 3)
+            amount_precision = market.get('precision', {}).get('amount', 2)
+            
+            # 如果精度信息不完整，使用默认值
+            if price_precision is None:
+                price_precision = 3
+            if amount_precision is None:
+                amount_precision = 2
+                
+            self.TRADE_CONFIG['price_precision'] = price_precision
+            self.TRADE_CONFIG['amount_precision'] = amount_precision
             
             print(f"📏 最小交易量: {self.TRADE_CONFIG['min_amount']} SOL")
             print(f"🎯 价格精度: {self.TRADE_CONFIG['price_precision']}")
@@ -156,8 +167,7 @@ class BinanceSOLTradingBot:
             print(f"⚙️ 设置杠杆: {self.TRADE_CONFIG['leverage']}x")
             self.exchange.set_leverage(
                 self.TRADE_CONFIG['leverage'],
-                symbol,
-                {'mgnMode': 'cross'}
+                symbol
             )
             
             # 设置保证金模式 (币安默认全仓)
@@ -264,73 +274,103 @@ class BinanceSOLTradingBot:
             print(f"🔧 智能仓位已禁用，使用固定仓位: {fixed_quantity} SOL")
             return fixed_quantity
 
-        #try:
-        # 获取账户余额
-        balance = self.exchange.fetch_balance()
-        usdt_balance = balance['USDT']['free']
+        try:
+            # 获取账户余额
+            balance = self.exchange.fetch_balance()
+            usdt_balance = balance['USDT']['free']
+            
+            # 检查余额有效性
+            if usdt_balance <= 0:
+                print("⚠️ 账户USDT余额不足，使用基础仓位")
+                return sol_config['base_quantity']
 
-        # 基础USDT投入
-        base_usdt = config['base_usdt_amount']
-        print(f"💰 可用USDT余额: {usdt_balance:.2f}, 下单基数: {base_usdt} USDT")
+            # 基础USDT投入
+            base_usdt = config['base_usdt_amount']
+            print(f"💰 可用USDT余额: {usdt_balance:.2f}, 下单基数: {base_usdt} USDT")
 
-        # 根据信心程度调整
-        confidence_multiplier = {
-            'HIGH': config['high_confidence_multiplier'],
-            'MEDIUM': config['medium_confidence_multiplier'],
-            'LOW': config['low_confidence_multiplier']
-        }.get(signal_data.get('confidence', 'MEDIUM'), 1.0)
+            # 根据信心程度调整
+            confidence_multiplier = {
+                'HIGH': config['high_confidence_multiplier'],
+                'MEDIUM': config['medium_confidence_multiplier'],
+                'LOW': config['low_confidence_multiplier']
+            }.get(signal_data.get('confidence', 'MEDIUM'), 1.0)
 
-        # 根据趋势强度调整
-        trend = price_data['trend_analysis'].get('overall', '震荡整理')
-        if trend in ['强势上涨', '强势下跌']:
-            trend_multiplier = config['trend_strength_multiplier']
-        else:
-            trend_multiplier = 1.0
+            # 根据趋势强度调整
+            trend = price_data.get('trend_analysis', {}).get('overall', '震荡整理')
+            if trend in ['强势上涨', '强势下跌']:
+                trend_multiplier = config['trend_strength_multiplier']
+            else:
+                trend_multiplier = 1.0
 
-        # 根据RSI状态调整（超买超卖区域减仓）
-        rsi = price_data['technical_data'].get('rsi', 50)
-        if rsi > 75 or rsi < 25:
-            rsi_multiplier = 0.7
-        else:
-            rsi_multiplier = 1.0
+            # 根据RSI状态调整（超买超卖区域减仓）
+            rsi = price_data.get('technical_data', {}).get('rsi', 50)
+            if isinstance(rsi, (int, float)):
+                if rsi > 75 or rsi < 25:
+                    rsi_multiplier = 0.7
+                else:
+                    rsi_multiplier = 1.0
+            else:
+                rsi_multiplier = 1.0
 
-        # 计算建议投入USDT金额
-        suggested_usdt = base_usdt * confidence_multiplier * trend_multiplier * rsi_multiplier
+            # 计算建议投入USDT金额
+            suggested_usdt = base_usdt * confidence_multiplier * trend_multiplier * rsi_multiplier
 
-        # 风险管理：不超过总资金的指定比例
-        max_usdt = usdt_balance * config['max_position_ratio']
-        final_usdt = min(suggested_usdt, max_usdt)
+            # 风险管理：不超过总资金的指定比例
+            max_usdt = usdt_balance * config['max_position_ratio']
+            final_usdt = min(suggested_usdt, max_usdt)
+            
+            # 确保最小投入金额
+            min_usdt = 5  # 最小投入5 USDT
+            if final_usdt < min_usdt:
+                final_usdt = min_usdt
+                print(f"⚠️ 投入金额小于最小值，调整为: {final_usdt} USDT")
 
-        # 🆕 优化：计算SOL数量（基于USDT价值和当前价格）
-        # 公式：SOL数量 = 投入USDT / 当前SOL价格
-        sol_quantity = final_usdt / price_data['price']
-        
-        # 精度处理
-        sol_quantity = round(sol_quantity, self.TRADE_CONFIG['amount_precision'])
+            # 🆕 优化：计算SOL数量（基于USDT价值和当前价格）
+            current_price = price_data.get('price', 0)
+            if current_price <= 0:
+                print("❌ 当前价格无效，使用基础仓位")
+                return sol_config['base_quantity']
+                
+            # 公式：SOL数量 = 投入USDT / 当前SOL价格
+            sol_quantity = final_usdt / current_price
+            
+            # 精度处理
+            amount_precision = self.TRADE_CONFIG.get('amount_precision', 2)
+            sol_quantity = round(sol_quantity, amount_precision)
 
-        # 确保最小交易量
-        min_quantity = sol_config['min_quantity']
-        if sol_quantity < min_quantity:
-            sol_quantity = min_quantity
-            print(f"⚠️ 仓位小于最小值，调整为: {sol_quantity} SOL")
+            # 确保最小交易量
+            min_quantity = sol_config['min_quantity']
+            if sol_quantity < min_quantity:
+                sol_quantity = min_quantity
+                print(f"⚠️ 仓位小于最小值，调整为: {sol_quantity} SOL")
+                
+            # 确保不超过最大仓位限制（基于账户余额）
+            max_quantity_from_balance = (usdt_balance * config['max_position_ratio']) / current_price
+            max_quantity_from_balance = round(max_quantity_from_balance, amount_precision)
+            if sol_quantity > max_quantity_from_balance:
+                sol_quantity = max_quantity_from_balance
+                print(f"⚠️ 仓位超过最大限制，调整为: {sol_quantity} SOL")
 
-        print(f"📊 仓位计算详情:")
-        print(f"   - 基础USDT: {base_usdt}")
-        print(f"   - 信心倍数: {confidence_multiplier}")
-        print(f"   - 趋势倍数: {trend_multiplier}")
-        print(f"   - RSI倍数: {rsi_multiplier}")
-        print(f"   - 建议USDT: {suggested_usdt:.2f}")
-        print(f"   - 最终USDT: {final_usdt:.2f}")
-        print(f"   - 当前SOL价格: {price_data['price']:.3f}")
-        print(f"   - 计算数量: {sol_quantity:.3f} SOL")
+            print(f"📊 仓位计算详情:")
+            print(f"   - 基础USDT: {base_usdt}")
+            print(f"   - 信心倍数: {confidence_multiplier}")
+            print(f"   - 趋势倍数: {trend_multiplier}")
+            print(f"   - RSI倍数: {rsi_multiplier}")
+            print(f"   - 建议USDT: {suggested_usdt:.2f}")
+            print(f"   - 最终USDT: {final_usdt:.2f}")
+            print(f"   - 当前SOL价格: {current_price:.3f}")
+            print(f"   - 计算数量: {sol_quantity:.3f} SOL")
+            print(f"   - 最大允许数量: {max_quantity_from_balance:.3f} SOL")
 
-        print(f"🎯 最终仓位: {final_usdt:.2f} USDT → {sol_quantity:.3f} SOL")
-        return sol_quantity
+            print(f"🎯 最终仓位: {final_usdt:.2f} USDT → {sol_quantity:.3f} SOL")
+            return sol_quantity
 
-        # except Exception as e:
-        #     print(f"❌ 仓位计算失败，使用基础仓位: {e}")
-        #     # 紧急备用计算
-        #     return sol_config['base_quantity']
+        except Exception as e:
+            print(f"❌ 仓位计算失败，使用基础仓位: {e}")
+            import traceback
+            traceback.print_exc()  # 打印详细错误信息
+            # 紧急备用计算
+            return sol_config['base_quantity']
 
     def calculate_technical_indicators(self, df):
         """
