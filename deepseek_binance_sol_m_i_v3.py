@@ -156,7 +156,8 @@ class BinanceSOLTradingBot:
             print(f"⚙️ 设置杠杆: {self.TRADE_CONFIG['leverage']}x")
             self.exchange.set_leverage(
                 self.TRADE_CONFIG['leverage'],
-                symbol
+                symbol,
+                {'mgnMode': 'cross'}
             )
             
             # 设置保证金模式 (币安默认全仓)
