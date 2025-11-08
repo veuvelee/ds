@@ -149,6 +149,9 @@ class BinanceSOLTradingBot:
             # 🆕 更安全的精度获取
             price_precision = market.get('precision', {}).get('price', 3)
             amount_precision = market.get('precision', {}).get('amount', 2)
+
+            print(f"price_precision:{price_precision}")
+            print(f"amount_precision:{amount_precision}")
             
             # 如果精度信息不完整，使用默认值
             if price_precision is None:
