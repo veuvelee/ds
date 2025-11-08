@@ -748,25 +748,42 @@ class BinanceSOLTradingBot:
                 return None
 
     def create_fallback_signal(self, price_data):
-        """创建备用交易信号"""
+        """创建备用交易信号 - 减少HOLD概率"""
+        current_price = price_data['price']
+        trend = price_data.get('trend_analysis', {}).get('overall', '震荡整理')
+        
+        # 🆕 备用信号也基于趋势判断，减少HOLD
+        if trend == '强势上涨':
+            signal = 'BUY'
+            reason = "趋势跟踪: 强势上涨趋势"
+        elif trend == '强势下跌':
+            signal = 'SELL' 
+            reason = "趋势跟踪: 强势下跌趋势"
+        else:
+            # 震荡时基于技术指标判断
+            rsi = price_data.get('technical_data', {}).get('rsi', 50)
+            if rsi > 55:
+                signal = 'BUY'
+                reason = "技术反弹: RSI偏强"
+            elif rsi < 45:
+                signal = 'SELL'
+                reason = "技术回调: RSI偏弱"
+            else:
+                signal = 'HOLD'
+                reason = "震荡观望: 技术指标中性"
+        
         return {
-            "signal": "HOLD",
-            "reason": "因技术分析暂时不可用，采取保守策略",
-            "stop_loss": price_data['price'] * (1 - self.TRADE_CONFIG['risk_management']['default_stop_loss_ratio']),
-            "take_profit": price_data['price'] * (1 + self.TRADE_CONFIG['risk_management']['default_take_profit_ratio']),
+            "signal": signal,
+            "reason": f"备用信号 - {reason}",
+            "stop_loss": current_price * (1 - self.TRADE_CONFIG['risk_management']['default_stop_loss_ratio']),
+            "take_profit": current_price * (1 + self.TRADE_CONFIG['risk_management']['default_take_profit_ratio']),
             "confidence": "LOW",
             "is_fallback": True
         }
 
     def analyze_with_deepseek(self, price_data):
         """
-        使用DeepSeek分析SOL市场并生成交易信号
-        
-        Args:
-            price_data: 价格数据
-            
-        Returns:
-            交易信号字典
+        使用DeepSeek分析SOL市场并生成交易信号 - 专业量化版
         """
         # 生成技术分析文本
         technical_analysis = self.generate_technical_analysis_text(price_data)
@@ -788,9 +805,9 @@ class BinanceSOLTradingBot:
         current_pos = self.get_current_position()
         position_text = "无持仓" if not current_pos else f"{current_pos['side']}仓, 数量: {current_pos['size']:.3f} SOL, 盈亏: {current_pos['unrealized_pnl']:.2f} USDT"
 
-        # 🆕 优化的SOL交易分析提示词
+        # 🆕 专业量化交易提示词
         prompt = f"""
-        你是一个专业的加密货币交易分析师，专注于SOL/USDT永续合约交易。请基于以下数据进行分析：
+        你是一个专业的量化交易算法，专注于SOL/USDT永续合约交易。请基于量化策略框架进行严格的技术分析。
 
         {kline_text}
 
@@ -807,46 +824,75 @@ class BinanceSOLTradingBot:
         - 价格变化: {price_data['price_change']:+.2f}%
         - 当前持仓: {position_text}
 
-        【SOL交易特性分析】
-        1. **高波动性**: SOL波动性高于BTC，需要更严格的风险控制
-        2. **技术指标敏感性**: SOL对技术指标反应更敏感，突破信号更可靠
-        3. **趋势持续性**: SOL趋势一旦形成，持续性较好
+        【专业量化交易策略框架 - 必须严格遵守】
 
-        【量化交易分析框架 - 必须遵守】
-        1. **多因子权重分配**:
-           - 趋势分析 (40%): 均线排列、MACD趋势
-           - 动量指标 (25%): RSI、成交量确认
-           - 价格位置 (20%): 布林带位置、支撑阻力
-           - 市场结构 (15%): K线形态、突破确认
+        1. **趋势跟踪策略 (权重40%)**
+        - 多头信号: 价格 > SMA20 > SMA50 + MACD金叉 + 趋势向上
+        - 空头信号: 价格 < SMA20 < SMA50 + MACD死叉 + 趋势向下
+        - 趋势强度评分: 根据均线排列和角度评分
 
-        2. **技术指标优先级**:
-           - 一级指标: 均线排列 > 趋势线突破
-           - 二级指标: RSI背离 > MACD金叉死叉
-           - 三级指标: 布林带突破 > 成交量确认
+        2. **动量突破策略 (权重30%)**
+        - 突破信号: 价格突破布林带上轨/下轨 + 成交量放大
+        - 回踩信号: 价格回踩关键支撑/阻力 + RSI背离
+        - 动量评分: 根据突破力度和成交量确认
 
-        3. **SOL特定交易逻辑**:
-           - 强势突破布林带上轨 + 成交量放大 → 高信心BUY
-           - 跌破关键支撑 + RSI超卖反弹 → 高信心SELL
-           - 均线多头排列 + MACD金叉 → 中等信心BUY
-           - 均线空头排列 + MACD死叉 → 中等信心SELL
+        3. **均值回归策略 (权重20%)**
+        - 超买回归: RSI > 70 + 布林带位置 > 80% → 潜在空头
+        - 超卖回归: RSI < 30 + 布林带位置 < 20% → 潜在多头
+        - 回归评分: 根据偏离程度和反转信号
 
-        4. **风险管理规则**:
-           - RSI > 75: 避免开多，考虑减仓
-           - RSI < 25: 避免开空，考虑减仓
-           - 布林带位置 > 80%: 警惕回调
-           - 布林带位置 < 20%: 关注反弹
+        4. **市场结构分析 (权重10%)**
+        - 支撑阻力: 关键水平突破/反弹
+        - K线形态: 看涨/看跌吞噬、锤子线、吊颈线等
+        - 成交量确认: 突破时成交量放大
 
-        【交易信号生成规则】
-        - BUY信号: 至少3个技术指标支持做多，趋势明确向上
-        - SELL信号: 至少3个技术指标支持做空，趋势明确向下  
-        - HOLD信号: 指标矛盾、趋势不明、或等待更好入场点
+        【量化信号生成规则 - 严格执行】
 
-        【重要】请基于严谨的技术分析做出明确判断，避免过度交易！
+        **BUY信号条件 (满足以下任意2个条件即可):**
+        ✅ 价格 > SMA20 且 SMA20 > SMA50 (趋势多头)
+        ✅ MACD金叉或MACD > 信号线 (动量向上)
+        ✅ RSI在40-70健康区间 (非超买)
+        ✅ 价格突破布林带中轨向上 (突破确认)
+        ✅ 成交量较20日均量放大 (资金流入)
+        ✅ K线出现看涨形态 (市场结构)
 
-        请用以下JSON格式回复：
+        **SELL信号条件 (满足以下任意2个条件即可):**
+        ✅ 价格 < SMA20 且 SMA20 < SMA50 (趋势空头)
+        ✅ MACD死叉或MACD < 信号线 (动量向下)
+        ✅ RSI在30-60健康区间 (非超卖)
+        ✅ 价格跌破布林带中轨向下 (跌破确认)
+        ✅ 成交量较20日均量放大 (资金流出)
+        ✅ K线出现看跌形态 (市场结构)
+
+        **HOLD信号条件 (仅在以下情况使用):**
+        ⚠️ 技术指标严重矛盾 (如趋势向上但RSI超买)
+        ⚠️ 价格在窄幅区间震荡 (布林带收缩)
+        ⚠️ 成交量极度萎缩 (市场观望)
+        ⚠️ 重大经济事件前 (不确定性高)
+
+        【信心等级评定标准】
+        🔥 HIGH: 满足3个以上条件 + 趋势明确 + 成交量确认
+        🔶 MEDIUM: 满足2个条件 + 有技术依据
+        🔸 LOW: 仅满足1个条件或指标矛盾
+
+        【重要原则 - 避免过度保守】
+        - 市场70%的时间都有交易机会，不要过度等待完美信号
+        - 量化交易追求的是概率优势，不是100%准确
+        - 在明确趋势中要敢于跟随，不要因轻微超买超卖而错过行情
+        - 风险管理通过仓位控制和止损实现，不是通过过度HOLD
+
+        【当前技术状况快速评估】
+        - 趋势状态: {price_data['trend_analysis'].get('overall', 'N/A')}
+        - 均线排列: { '多头' if price_data['price'] > price_data['technical_data'].get('sma_20', 0) > price_data['technical_data'].get('sma_50', 0) else '空头' if price_data['price'] < price_data['technical_data'].get('sma_20', 0) < price_data['technical_data'].get('sma_50', 0) else '震荡' }
+        - MACD状态: { '金叉' if price_data['technical_data'].get('macd', 0) > price_data['technical_data'].get('macd_signal', 0) else '死叉' }
+        - RSI位置: {price_data['technical_data'].get('rsi', 0):.1f} ({'超买' if price_data['technical_data'].get('rsi', 0) > 70 else '超卖' if price_data['technical_data'].get('rsi', 0) < 30 else '中性'})
+        - 布林带位置: {price_data['technical_data'].get('bb_position', 0):.1%}
+
+        基于以上量化框架，请给出明确的交易决策：
+
         {{
             "signal": "BUY|SELL|HOLD",
-            "reason": "详细的技术分析理由，包含具体的指标依据",
+            "reason": "基于量化策略的具体分析，列出满足的条件和技术依据",
             "stop_loss": 具体价格,
             "take_profit": 具体价格, 
             "confidence": "HIGH|MEDIUM|LOW"
@@ -857,16 +903,16 @@ class BinanceSOLTradingBot:
             response = self.deepseek_client.chat.completions.create(
                 model="deepseek-chat",
                 messages=[
-                    {"role": "system", "content": "你是专业的SOL交易员，专注于技术分析和风险管理。请结合多时间框架分析做出判断，并严格遵循JSON格式要求。"},
+                    {"role": "system", "content": "你是专业的量化交易算法，专注于技术分析和趋势跟踪。基于量化策略框架做出果断决策，避免过度保守。"},
                     {"role": "user", "content": prompt}
                 ],
                 stream=False,
-                temperature=0.1
+                temperature=0.3  # 🆕 提高温度减少保守性
             )
 
             # 安全解析JSON
             result = response.choices[0].message.content
-            print(f"🤖 DeepSeek原始回复: {result}")
+            print(f"🤖 DeepSeek量化分析回复: {result}")
 
             # 提取JSON部分
             start_idx = result.find('{')
@@ -885,6 +931,16 @@ class BinanceSOLTradingBot:
             required_fields = ['signal', 'reason', 'stop_loss', 'take_profit', 'confidence']
             if not all(field in signal_data for field in required_fields):
                 signal_data = self.create_fallback_signal(price_data)
+
+            # 🆕 信号后处理 - 减少过度HOLD
+            if signal_data['signal'] == 'HOLD' and signal_data.get('confidence') == 'LOW':
+                # 如果是低信心HOLD，重新评估
+                current_trend = price_data['trend_analysis'].get('overall', '')
+                if current_trend in ['强势上涨', '强势下跌']:
+                    # 在强势趋势中，倾向于跟随趋势
+                    signal_data['signal'] = 'BUY' if current_trend == '强势上涨' else 'SELL'
+                    signal_data['confidence'] = 'MEDIUM'
+                    signal_data['reason'] += f" | 趋势跟踪覆盖低信心HOLD: {current_trend}"
 
             # 保存信号到历史记录
             signal_data['timestamp'] = price_data['timestamp']
