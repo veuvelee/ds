@@ -290,7 +290,7 @@ class BinanceSOLTradingBot:
             df['bb_upper'] = df['bb_middle'] + (bb_std * 2)
             df['bb_lower'] = df['bb_middle'] - (bb_std * 2)
             
-            return df.fillna(method='bfill')
+            return df.bfill().ffill()
             
         except Exception as e:
             print(f"❌ 核心指标计算失败: {e}")
