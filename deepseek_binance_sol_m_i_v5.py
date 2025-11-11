@@ -92,6 +92,7 @@ def send_dingtalk_message(title, message, message_type="info"):
         }
         
         response = requests.post(DINGTALK_CONFIG['webhook'], json=data, timeout=10)
+        print(f"response:{response}")
         if response.status_code == 200:
             print(f"✅ 钉钉消息发送成功: {title}")
         else:
