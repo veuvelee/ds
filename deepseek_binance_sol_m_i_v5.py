@@ -9,6 +9,10 @@ from dotenv import load_dotenv
 import json
 import requests
 from datetime import datetime, timedelta
+import hmac
+import hashlib
+import base64
+import urllib.parse
 
 load_dotenv()
 
@@ -59,48 +63,80 @@ TRADE_CONFIG = {
     }
 }
 
+import hashlib
+import hmac
+import base64
+import urllib.parse
+import time
 
 def send_dingtalk_message(title, message, message_type="info"):
-    """发送钉钉机器人消息"""
+    """发送钉钉机器人消息（带签名验证）"""
     if not DINGTALK_CONFIG['enable'] or not DINGTALK_CONFIG['webhook']:
         return
     
     try:
-        # 根据消息类型设置颜色
-        colors = {
-            "info": "#2DB7F5",      # 蓝色
-            "success": "#00CC00",   # 绿色
-            "warning": "#FF9900",   # 橙色
-            "error": "#FF0000"      # 红色
+        # 根据消息类型设置表情符号
+        emojis = {
+            "info": "ℹ️",
+            "success": "✅", 
+            "warning": "⚠️",
+            "error": "❌"
         }
-        color = colors.get(message_type, "#2DB7F5")
+        emoji = emojis.get(message_type, "ℹ️")
         
+        timestamp = str(round(time.time() * 1000))
+        
+        # 🆕 生成签名
+        secret = DINGTALK_CONFIG['secret']
+        if secret:
+            string_to_sign = f"{timestamp}\n{secret}"
+            hmac_code = hmac.new(
+                secret.encode('utf-8'), 
+                string_to_sign.encode('utf-8'), 
+                hashlib.sha256
+            ).digest()
+            sign = urllib.parse.quote_plus(base64.b64encode(hmac_code))
+            
+            # 添加签名到webhook
+            webhook_url = f"{DINGTALK_CONFIG['webhook']}&timestamp={timestamp}&sign={sign}"
+        else:
+            webhook_url = DINGTALK_CONFIG['webhook']
+            print("⚠️ 未配置钉钉签名，使用无签名方式发送")
+
         # 构建消息内容
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        full_message = f"**{title}**\n\n{message}\n\n⏰ 时间: {timestamp}"
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        full_message = f"### {emoji} {title}\n\n{message}\n\n---\n⏰ 时间: {current_time}"
         
         # 钉钉消息格式
         data = {
             "msgtype": "markdown",
             "markdown": {
-                "title": title,
+                "title": f"{emoji} {title}",
                 "text": full_message
             },
             "at": {
-                "isAtAll": False  # 不@所有人
+                "isAtAll": False
             }
         }
         
-        response = requests.post(DINGTALK_CONFIG['webhook'], json=data, timeout=10)
-        print(f"response:{response}")
+        headers = {
+            "Content-Type": "application/json",
+            "Charset": "UTF-8"
+        }
+        
+        response = requests.post(webhook_url, json=data, headers=headers, timeout=10)
+        
         if response.status_code == 200:
-            print(f"✅ 钉钉消息发送成功: {title}")
+            result = response.json()
+            if result.get('errcode') == 0:
+                print(f"✅ 钉钉消息发送成功: {title}")
+            else:
+                print(f"❌ 钉钉消息发送失败: {result.get('errmsg', '未知错误')}")
         else:
-            print(f"❌ 钉钉消息发送失败: {response.status_code}")
+            print(f"❌ 钉钉消息发送失败，状态码: {response.status_code}")
             
     except Exception as e:
         print(f"❌ 钉钉消息发送异常: {e}")
-
 
 def setup_exchange():
     """设置交易所参数 - Binance版本"""
