@@ -107,6 +107,7 @@ def setup_exchange():
         print("🔍 获取SOL合约规格...")
         markets = exchange.load_markets()
         sol_market = markets[TRADE_CONFIG['symbol']]
+        print(sol_market)
         
         # 获取合约乘数（Binance SOL合约通常为1 SOL = 1张）
         contract_size = float(sol_market.get('contractSize', 1))
