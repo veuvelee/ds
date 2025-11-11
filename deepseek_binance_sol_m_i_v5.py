@@ -36,7 +36,7 @@ DINGTALK_CONFIG = {
 
 # 交易参数配置 - 针对SOL优化
 TRADE_CONFIG = {
-    'symbol': 'SOL/USDT',  # Binance的SOL合约符号
+    'symbol': 'SOL/USDT:USDT',  # Binance的SOL合约符号
     'leverage': 10,  # 杠杆倍数
     'timeframe': '15m',  # 使用15分钟K线
     'execution_interval': 15,  # 🆕 新增：执行间隔分钟数（可配置）
@@ -528,7 +528,7 @@ def get_current_position():
         positions = exchange.fetch_positions([TRADE_CONFIG['symbol']])
 
         for pos in positions:
-            if pos['symbol'] == TRADE_CONFIG['symbol'] + ":USDT":
+            if pos['symbol'] == TRADE_CONFIG['symbol']:
                 contracts = float(pos['contracts']) if pos['contracts'] else 0
 
                 if contracts > 0:
