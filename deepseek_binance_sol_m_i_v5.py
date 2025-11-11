@@ -54,11 +54,11 @@ TRADE_CONFIG = {
     # 针对SOL的智能仓位参数（SOL价格较低，调整基础金额）
     'position_management': {
         'enable_intelligent_position': True,
-        'base_usdt_amount': 50,  # 🆕 调整：SOL价格较低，降低基础金额
+        'base_usdt_amount': 100,  # 🆕 调整：SOL价格较低，降低基础金额
         'high_confidence_multiplier': 1.5,
         'medium_confidence_multiplier': 1.0,
         'low_confidence_multiplier': 0.5,
-        'max_position_ratio': 10,  # 单次最大仓位比例
+        'max_position_ratio': 30,  # 单次最大仓位比例
         'trend_strength_multiplier': 1.2
     }
 }
