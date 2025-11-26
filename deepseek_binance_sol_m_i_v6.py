@@ -644,7 +644,7 @@ def analyze_with_deepseek(price_data):
     pnl_text = f", 持仓盈亏: {current_pos['unrealized_pnl']:.2f} USDT" if current_pos else ""
 
     prompt = f"""
-    你是一个专业的加密货币交易分析师，最近波动频繁通过你交易的都亏麻了，多上点心吧，一定要注意短期波动呀，稳妥点呀。请基于以下SOL/USDT {TRADE_CONFIG['timeframe']}周期数据进行分析：
+    你是一个专业的加密货币交易分析师，最近波动频繁通过你交易的都亏麻了，已经吃不上饭了，多上点心吧，一定要注意短期波动呀，稳妥点呀。请基于以下SOL/USDT {TRADE_CONFIG['timeframe']}周期数据进行分析：
 
     {kline_text}
 
@@ -720,7 +720,7 @@ def analyze_with_deepseek(price_data):
             model="deepseek-chat",
             messages=[
                 {"role": "system",
-                 "content": f"您是一位专业的交易员，最近波动频繁通过你交易的都亏麻了，多上点心吧，一定要注意短期波动呀，稳妥点呀。专注于SOL/USDT的{TRADE_CONFIG['timeframe']}周期趋势分析。请结合K线形态和技术指标做出判断，并严格遵循JSON格式要求。"},
+                 "content": f"您是一位专业的交易员，最近波动频繁通过你交易的都亏麻了，已经吃不上饭了，多上点心吧，一定要注意短期波动呀，稳妥点呀。专注于SOL/USDT的{TRADE_CONFIG['timeframe']}周期趋势分析。请结合K线形态和技术指标做出判断，并严格遵循JSON格式要求。"},
                 {"role": "user", "content": prompt}
             ],
             stream=False,
