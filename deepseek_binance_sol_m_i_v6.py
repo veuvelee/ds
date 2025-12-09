@@ -40,6 +40,7 @@ DINGTALK_CONFIG = {
 
 # 交易参数配置 - 针对SOL优化
 TRADE_CONFIG = {
+    'user':os.getenv('USER'),
     'symbol': 'SOL/USDT:USDT',  # Binance的SOL合约符号
     'leverage': 10,  # 杠杆倍数
     'timeframe': '15m',  # 使用15分钟K线
@@ -105,7 +106,7 @@ def send_dingtalk_message(title, message, message_type="info"):
 
         # 构建消息内容
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        full_message = f"### {emoji} {title}\n\n{message}\n\n---\n⏰ 时间: {current_time}"
+        full_message = f"### [{TRADE_CONFIG['user']}] {emoji} {title}\n\n{message}\n\n---\n⏰ 时间: {current_time}"
         
         # 钉钉消息格式
         data = {
