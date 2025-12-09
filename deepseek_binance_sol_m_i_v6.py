@@ -40,7 +40,7 @@ DINGTALK_CONFIG = {
 
 # 交易参数配置 - 针对SOL优化
 TRADE_CONFIG = {
-    'user':os.getenv('USER'),
+    'user':os.getenv('EXECUTION_USER'),
     'symbol': 'SOL/USDT:USDT',  # Binance的SOL合约符号
     'leverage': 10,  # 杠杆倍数
     'timeframe': '15m',  # 使用15分钟K线
