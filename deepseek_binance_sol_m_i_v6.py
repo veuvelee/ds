@@ -43,7 +43,7 @@ TRADE_CONFIG = {
     'symbol': 'SOL/USDT:USDT',  # Binance的SOL合约符号
     'leverage': 10,  # 杠杆倍数
     'timeframe': '15m',  # 使用15分钟K线
-    'execution_interval': 15,  # 🆕 新增：执行间隔分钟数（可配置）
+    'execution_interval': os.getenv('EXECUTION_INTERVAL'),  # 🆕 新增：执行间隔分钟数（可配置）
     'test_mode': False,  # 测试模式
     'data_points': 96,  # 24小时数据（96根15分钟K线）
     'analysis_periods': {
