@@ -816,142 +816,73 @@ def cancel_existing_conditional_orders():
         return 0
 
 def setup_take_profit_stop_loss(position_side, position_size, take_profit_price, stop_loss_price):
-    """设置止盈止损订单 - Binance算法订单版本"""
+    """设置止盈止损订单"""
     try:
-        symbol = TRADE_CONFIG['symbol'].replace('/USDT:USDT', 'USDT')  # 格式化符号
-        
-        # Binance需要先将持仓方向转换为对应参数
-        position_side_map = {
-            'long': 'BOTH',  # 多头对应买卖双向
-            'short': 'BOTH'  # 空头也需要BOTH
-        }
-        
-        workingType = "MARK_PRICE"  # 使用标记价格
+        symbol = TRADE_CONFIG['symbol']
+        current_price = exchange.fetch_ticker(symbol)['last']
         
         print(f"🎯 设置止盈止损:")
-        print(f"   - 持仓方向: {position_side}")
+        print(f"   - 方向: {position_side}")
         print(f"   - 数量: {position_size}张")
-        print(f"   - 止盈价: ${take_profit_price:.2f}")
-        print(f"   - 止损价: ${stop_loss_price:.2f}")
-        print(f"   - 工作类型: {workingType}")
-        
-        # 获取当前持仓，用于确定是否需要设置双向止损
-        current_position = get_current_position()
-        if not current_position:
-            print("❌ 当前无持仓，无法设置止盈止损")
-            return False
-            
-        current_price = current_position['entry_price']
-        print(f"   - 入场价: ${current_price:.2f}")
-        
-        # 根据持仓方向设置止损止盈的相对价格
+        print(f"   - 止盈: ${take_profit_price:.2f}")
+        print(f"   - 止损: ${stop_loss_price:.2f}")
+        print(f"   - 当前价: ${current_price:.2f}")
+
+        # 设置止损订单
         if position_side == 'long':
-            # 多头：止损价低于当前价，止盈价高于当前价
-            if stop_loss_price >= current_price:
-                print("⚠️ 多头止损价应低于入场价，自动调整")
-                stop_loss_price = current_price * 0.98  # 默认2%止损
-                
-            if take_profit_price <= current_price:
-                print("⚠️ 多头止盈价应高于入场价，自动调整")
-                take_profit_price = current_price * 1.02  # 默认2%止盈
-                
-            # 计算价格差（相对于当前价）
-            stop_loss_distance = current_price - stop_loss_price
-            take_profit_distance = take_profit_price - current_price
-            
-        else:  # short
-            # 空头：止损价高于当前价，止盈价低于当前价
-            if stop_loss_price <= current_price:
-                print("⚠️ 空头止损价应高于入场价，自动调整")
-                stop_loss_price = current_price * 1.02  # 默认2%止损
-                
-            if take_profit_price >= current_price:
-                print("⚠️ 空头止盈价应低于入场价，自动调整")
-                take_profit_price = current_price * 0.98  # 默认2%止盈
-                
-            # 计算价格差（相对于当前价）
-            stop_loss_distance = stop_loss_price - current_price
-            take_profit_distance = current_price - take_profit_price
-        
-        # 取消所有现有的条件订单
-        cancel_existing_conditional_orders()
-        
-        try:
-            # 设置止损订单 - 使用Binance的算法订单API
-            print(f"📉 设置止损订单: {stop_loss_price:.2f}")
-            
-            # 使用普通限价订单替代止损
-            stop_order = exchange.create_order(
-                TRADE_CONFIG['symbol'],
-                'limit',
-                'sell' if position_side == 'long' else 'buy',
-                position_size,
-                stop_loss_price,
-                {
-                    'reduceOnly': True,
-                    'timeInForce': 'GTC',
-                    'stopPrice': stop_loss_price,
-                    'workingType': workingType,
-                    'positionSide': position_side_map[position_side]
-                }
-            )
-            
-            print(f"✅ 止损订单设置成功: ID {stop_order.get('id', 'N/A')}")
-            
-        except Exception as e:
-            print(f"⚠️ 止损订单设置失败，尝试备选方案: {e}")
-            # 备选方案：使用普通限价止损
-            try:
-                stop_order = exchange.create_order(
-                    TRADE_CONFIG['symbol'],
-                    'limit',
-                    'sell' if position_side == 'long' else 'buy',
-                    position_size,
-                    stop_loss_price,
-                    {'reduceOnly': True, 'timeInForce': 'GTC'}
-                )
-                print(f"✅ 止损订单（备选方案）设置成功: ID {stop_order.get('id', 'N/A')}")
-            except Exception as e2:
-                print(f"❌ 止损订单备选方案也失败: {e2}")
-        
-        try:
-            # 设置止盈订单
-            print(f"📈 设置止盈订单: {take_profit_price:.2f}")
-            
-            take_profit_order = exchange.create_order(
-                TRADE_CONFIG['symbol'],
-                'limit',
-                'sell' if position_side == 'long' else 'buy',
-                position_size,
-                take_profit_price,
-                {
-                    'reduceOnly': True,
-                    'timeInForce': 'GTC',
-                    'positionSide': position_side_map[position_side]
-                }
-            )
-            
-            print(f"✅ 止盈订单设置成功: ID {take_profit_order.get('id', 'N/A')}")
-            
-        except Exception as e:
-            print(f"❌ 止盈订单设置失败: {e}")
-            # 止盈失败不影响止损
-        
+            # 多头：止损卖单，止盈卖单
+            stop_loss_side = 'sell'
+            take_profit_side = 'sell'
+        else:
+            # 空头：止损买单，止盈买单
+            stop_loss_side = 'buy'
+            take_profit_side = 'buy'
+
+        # 设置止损订单（市价止损）
+        stop_loss_order = exchange.create_order(
+            symbol,
+            'stop_market',
+            stop_loss_side,
+            position_size,
+            None,
+            {
+                'stopPrice': stop_loss_price,
+                'reduceOnly': True,
+                'closePosition': False
+            }
+        )
+        print(f"✅ 止损订单设置成功: ID {stop_loss_order['id']}")
+
+        # 设置止盈订单（限价止盈）
+        take_profit_order = exchange.create_order(
+            symbol,
+            'limit',
+            take_profit_side,
+            position_size,
+            take_profit_price,
+            {
+                'reduceOnly': True,
+                'timeInForce': 'GTC'  # 一直有效直至取消
+            }
+        )
+        print(f"✅ 止盈订单设置成功: ID {take_profit_order['id']}")
+
         # 发送钉钉通知
         send_dingtalk_message(
             "🎯 止盈止损设置完成",
-            f"**SOL止盈止损设置完成**\n\n"
+            f"**SOL止盈止损设置成功**\n\n"
             f"- 持仓方向: {position_side}\n"
             f"- 持仓数量: {position_size}张\n"
-            f"- 入场价格: ${current_price:.2f}\n"
-            f"- 止损价格: ${stop_loss_price:.2f} (距离: {stop_loss_distance:.2f})\n"
-            f"- 止盈价格: ${take_profit_price:.2f} (距离: {take_profit_distance:.2f})\n"
-            f"- 当前浮动盈亏: {current_position.get('unrealized_pnl', 0):.2f} USDT",
+            f"- 止损价格: ${stop_loss_price:.2f}\n"
+            f"- 止盈价格: ${take_profit_price:.2f}\n"
+            f"- 当前价格: ${current_price:.2f}\n"
+            f"- 止损订单: {stop_loss_order['id']}\n"
+            f"- 止盈订单: {take_profit_order['id']}",
             "info"
         )
-        
+
         return True
-        
+
     except Exception as e:
         error_msg = f"设置止盈止损失败: {e}"
         print(f"❌ {error_msg}")
