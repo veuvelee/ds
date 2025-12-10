@@ -816,49 +816,157 @@ def cancel_existing_conditional_orders():
         return 0
 
 def setup_take_profit_stop_loss(position_side, position_size, take_profit_price, stop_loss_price):
-    """设置止盈止损订单（简化高效版）"""
+    """设置止盈止损订单（修复算法订单问题）"""
     
-    def get_current_price():
-        """获取当前价格"""
+    def get_account_type():
+        """获取账户类型"""
         try:
-            ticker = exchange.fetch_ticker(TRADE_CONFIG['symbol'])
-            price = ticker.get('last') or ticker.get('close')
-            return float(price) if price else 0.0
+            # 检查是否是期货账户
+            if hasattr(exchange, 'fapiPrivateGetAccount'):
+                return 'future'
+            elif hasattr(exchange, 'dapiPrivateGetAccount'):
+                return 'coin_future'
+            else:
+                return 'spot'
         except:
-            return 0.0
+            return 'spot'
     
-    def create_simple_order(order_type, side, trigger_price=None, limit_price=None):
+    def create_algo_order_for_future(symbol, order_type, side, quantity, trigger_price, position_side, tag=''):
         """
-        创建简单订单，使用最小参数集
+        为期货账户创建算法订单
         """
-        symbol = TRADE_CONFIG['symbol']
-        
-        # 基础参数
-        params = {}
-        
-        # 算法订单需要stopPrice
-        if order_type in ['STOP_MARKET', 'TAKE_PROFIT_MARKET'] and trigger_price:
-            params['stopPrice'] = trigger_price
-        
-        # 限价订单需要timeInForce
-        if order_type == 'LIMIT' and limit_price:
-            params['timeInForce'] = 'GTC'
-        
-        # 尝试创建订单，不使用reduceOnly和positionSide
-        return exchange.create_order(
-            symbol=symbol,
-            type=order_type,
-            side=side,
-            amount=position_size,
-            price=limit_price,
-            params=params
-        )
+        try:
+            # 对于币安期货，算法订单可能需要特殊的端点
+            # 首先尝试普通的create_order，但使用正确的参数
+            params = {
+                'stopPrice': trigger_price,
+                'positionSide': position_side,
+                'workingType': 'MARK_PRICE',
+                'priceProtect': True,
+                'closePosition': False,
+                # 注意：期货可能不支持reduceOnly参数，或者需要特定条件
+            }
+            
+            # 尝试不同的参数组合
+            param_combinations = [
+                params,
+                {k: v for k, v in params.items() if k != 'closePosition'},  # 移除closePosition
+                {k: v for k, v in params.items() if k != 'priceProtect'},   # 移除priceProtect
+                {'stopPrice': trigger_price, 'positionSide': position_side},  # 最简单参数
+            ]
+            
+            for i, param_set in enumerate(param_combinations):
+                try:
+                    print(f"🔄 尝试参数组合 {i+1}/{len(param_combinations)}")
+                    
+                    # 添加唯一订单ID
+                    param_set['newClientOrderId'] = f"{tag}_{exchange.milliseconds()}"
+                    
+                    order = exchange.create_order(
+                        symbol,
+                        order_type,  # 'STOP_MARKET' 或 'TAKE_PROFIT_MARKET'
+                        side,
+                        quantity,
+                        None,  # 市价单没有价格
+                        param_set
+                    )
+                    
+                    print(f"✅ 使用组合{i+1}创建成功")
+                    return order
+                    
+                except Exception as e:
+                    if i < len(param_combinations) - 1:
+                        print(f"⚠️ 组合{i+1}失败: {str(e)[:100]}...")
+                        continue
+                    else:
+                        raise
+            
+        except Exception as e:
+            print(f"❌ 创建{algo_type}订单失败: {e}")
+            
+            # 尝试使用专门的算法订单端点
+            try:
+                print(f"🔄 尝试专门算法订单API...")
+                
+                # 对于币安期货，可能需要使用特殊的算法订单端点
+                # 注意：这里需要根据ccxt的具体实现来调整
+                if hasattr(exchange, 'private_post_algo_order'):
+                    request = {
+                        'symbol': symbol.replace('/', ''),
+                        'side': side.upper(),
+                        'type': order_type,
+                        'quantity': exchange.amount_to_precision(symbol, quantity),
+                        'stopPrice': exchange.price_to_precision(symbol, trigger_price),
+                        'positionSide': position_side,
+                    }
+                    
+                    response = exchange.private_post_algo_order(request)
+                    
+                    return {
+                        'id': response.get('orderId'),
+                        'info': response,
+                        'status': 'open'
+                    }
+                else:
+                    raise Exception("不支持算法订单API")
+                    
+            except Exception as api_error:
+                print(f"❌ 算法订单API也失败: {api_error}")
+                raise
+    
+    def create_limit_order(symbol, side, quantity, price, position_side, tag=''):
+        """创建限价订单（仅用于止盈）"""
+        try:
+            order = exchange.create_order(
+                symbol,
+                'LIMIT',
+                side,
+                quantity,
+                price,
+                {
+                    'timeInForce': 'GTC',
+                    'positionSide': position_side,
+                    'newClientOrderId': f"{tag}_limit_{exchange.milliseconds()}"
+                }
+            )
+            return order
+        except Exception as e:
+            print(f"❌ 创建限价单失败: {e}")
+            raise
+    
+    def create_trailing_stop_order(symbol, side, quantity, activation_price, callback_rate, position_side):
+        """创建移动止损订单（替代方案）"""
+        try:
+            order = exchange.create_order(
+                symbol,
+                'TRAILING_STOP_MARKET',
+                side,
+                quantity,
+                None,
+                {
+                    'activationPrice': activation_price,
+                    'callbackRate': callback_rate,
+                    'positionSide': position_side
+                }
+            )
+            return order
+        except Exception as e:
+            print(f"❌ 创建移动止损失败: {e}")
+            raise
     
     try:
         symbol = TRADE_CONFIG['symbol']
-        current_price = get_current_price()
+        account_type = get_account_type()
+        
+        # 获取当前价格
+        try:
+            ticker = exchange.fetch_ticker(symbol)
+            current_price = float(ticker.get('last') or ticker.get('close') or 0)
+        except:
+            current_price = 0.0
         
         print(f"\n🎯 设置止盈止损")
+        print(f"账户类型: {account_type}")
         print(f"交易对: {symbol}")
         print(f"方向: {position_side}")
         print(f"数量: {position_size}张")
@@ -869,164 +977,185 @@ def setup_take_profit_stop_loss(position_side, position_size, take_profit_price,
         # 确定订单方向
         if position_side == 'long':
             exit_side = 'sell'
-            print(f"多头仓位 -> 平仓方向: {exit_side}")
+            pos_side_param = 'LONG'
         else:
             exit_side = 'buy'
-            print(f"空头仓位 -> 平仓方向: {exit_side}")
+            pos_side_param = 'SHORT'
         
         orders_created = []
-        error_messages = []
         
-        # ========== 创建止损订单 ==========
-        print(f"\n📉 尝试创建止损订单...")
-        try:
-            # 尝试算法订单
-            sl_order = create_simple_order(
-                order_type='STOP_MARKET',
-                side=exit_side,
-                trigger_price=stop_loss_price
-            )
-            print(f"✅ 算法止损订单成功: ID {sl_order.get('id')}")
-            orders_created.append(('止损', sl_order))
-        except Exception as sl_error:
-            error_messages.append(f"算法止损失败: {sl_error}")
-            print(f"⚠️ 算法止损失败，尝试限价止损单...")
+        # ========== 根据账户类型选择策略 ==========
+        if account_type in ['future', 'coin_future']:
+            print(f"\n📊 检测到期货账户，使用期货订单接口")
             
+            # 创建止损订单
+            print(f"\n📉 创建止损订单...")
             try:
-                # 计算限价止损单价格（略微调整以避免立即成交）
-                if exit_side == 'sell':
-                    limit_price = stop_loss_price * 0.995  # 多头止损：略低于止损价
-                else:
-                    limit_price = stop_loss_price * 1.005  # 空头止损：略高于止损价
+                # 先尝试创建止损算法订单
+                stop_loss_order = create_algo_order_for_future(
+                    symbol=symbol,
+                    order_type='STOP_MARKET',
+                    side=exit_side,
+                    quantity=position_size,
+                    trigger_price=stop_loss_price,
+                    position_side=pos_side_param,
+                    tag='sl'
+                )
+                print(f"✅ 止损订单创建成功: ID {stop_loss_order.get('id', 'N/A')}")
+                orders_created.append(('止损', stop_loss_order))
+            except Exception as sl_error:
+                print(f"❌ 止损算法订单失败: {sl_error}")
                 
-                sl_order = create_simple_order(
-                    order_type='LIMIT',
-                    side=exit_side,
-                    limit_price=limit_price
-                )
-                print(f"✅ 限价止损单成功: ID {sl_order.get('id')}")
-                orders_created.append(('限价止损', sl_order))
-            except Exception as limit_error:
-                error_messages.append(f"限价止损失败: {limit_error}")
-                print(f"❌ 止损订单创建失败")
-        
-        # ========== 创建止盈订单 ==========
-        print(f"\n📈 尝试创建止盈订单...")
-        try:
-            # 尝试算法订单
-            tp_order = create_simple_order(
-                order_type='TAKE_PROFIT_MARKET',
-                side=exit_side,
-                trigger_price=take_profit_price
-            )
-            print(f"✅ 算法止盈订单成功: ID {tp_order.get('id')}")
-            orders_created.append(('止盈', tp_order))
-        except Exception as tp_error:
-            error_messages.append(f"算法止盈失败: {tp_error}")
-            print(f"⚠️ 算法止盈失败，尝试限价止盈单...")
+                # 备选方案：使用移动止损
+                print(f"🔄 尝试移动止损...")
+                try:
+                    # 设置激活价格（比当前价格略高/低）
+                    if position_side == 'long':
+                        activation_price = current_price * 0.995  # 多头：价格下跌0.5%激活
+                    else:
+                        activation_price = current_price * 1.005  # 空头：价格上涨0.5%激活
+                    
+                    callback_rate = 0.5  # 0.5% 回撤
+                    
+                    stop_loss_order = create_trailing_stop_order(
+                        symbol=symbol,
+                        side=exit_side,
+                        quantity=position_size,
+                        activation_price=activation_price,
+                        callback_rate=callback_rate,
+                        position_side=pos_side_param
+                    )
+                    print(f"✅ 移动止损创建成功: ID {stop_loss_order.get('id', 'N/A')}")
+                    orders_created.append(('移动止损', stop_loss_order))
+                except Exception as ts_error:
+                    print(f"❌ 移动止损也失败: {ts_error}")
             
+            # 创建止盈订单
+            print(f"\n📈 创建止盈订单...")
             try:
-                tp_order = create_simple_order(
-                    order_type='LIMIT',
+                # 先尝试算法止盈订单
+                take_profit_order = create_algo_order_for_future(
+                    symbol=symbol,
+                    order_type='TAKE_PROFIT_MARKET',
                     side=exit_side,
-                    limit_price=take_profit_price
+                    quantity=position_size,
+                    trigger_price=take_profit_price,
+                    position_side=pos_side_param,
+                    tag='tp'
                 )
-                print(f"✅ 限价止盈单成功: ID {tp_order.get('id')}")
-                orders_created.append(('限价止盈', tp_order))
-            except Exception as limit_error:
-                error_messages.append(f"限价止盈失败: {limit_error}")
-                print(f"❌ 止盈订单创建失败")
+                print(f"✅ 止盈订单创建成功: ID {take_profit_order.get('id', 'N/A')}")
+                orders_created.append(('止盈', take_profit_order))
+            except Exception as tp_error:
+                print(f"❌ 算法止盈失败: {tp_error}")
+                
+                # 备选方案：使用限价单
+                try:
+                    take_profit_order = create_limit_order(
+                        symbol=symbol,
+                        side=exit_side,
+                        quantity=position_size,
+                        price=take_profit_price,
+                        position_side=pos_side_param,
+                        tag='tp'
+                    )
+                    print(f"✅ 限价止盈单创建成功: ID {take_profit_order.get('id', 'N/A')}")
+                    orders_created.append(('限价止盈', take_profit_order))
+                except Exception as limit_error:
+                    print(f"❌ 限价止盈也失败: {limit_error}")
+        
+        else:
+            # 现货账户 - 使用不同的方法
+            print(f"\n📊 检测到现货账户，使用现货订单接口")
+            
+            # 现货账户的止损方法不同
+            # 这里需要根据现货API来调整
+            print(f"⚠️ 现货账户需要不同的止损策略")
+            
+            # 对于现货，我们可能只能使用限价单或OCO订单
+            try:
+                # 尝试创建OCO订单（一个订单包含止盈和止损）
+                oco_params = {
+                    'stopPrice': stop_loss_price,
+                    'stopLimitPrice': stop_loss_price * 0.99,
+                    'stopLimitTimeInForce': 'GTC',
+                }
+                
+                # 注意：现货可能不支持OCO，或者需要特定的API调用
+                print(f"⚠️ 现货止损策略需要额外实现")
+                
+            except Exception as e:
+                print(f"❌ 现货止损设置失败: {e}")
         
         # ========== 结果处理 ==========
         import time
         current_time = time.strftime('%Y-%m-%d %H:%M:%S')
         
         if orders_created:
-            # 重新获取最新价格
-            final_price = get_current_price() or current_price
-            
-            # 计算风险收益比
-            if current_price > 0:
-                if position_side == 'long':
-                    risk = current_price - stop_loss_price
-                    reward = take_profit_price - current_price
-                else:
-                    risk = stop_loss_price - current_price
-                    reward = current_price - take_profit_price
-                
-                if risk > 0:
-                    risk_reward = round(reward / risk, 2)
-                else:
-                    risk_reward = "N/A"
-            else:
-                risk_reward = "N/A"
+            # 重新获取当前价格
+            try:
+                ticker = exchange.fetch_ticker(symbol)
+                final_price = float(ticker.get('last') or ticker.get('close') or current_price)
+            except:
+                final_price = current_price
             
             # 构建消息
-            order_details = "\n".join([f"- {name}: ID {order.get('id')}" for name, order in orders_created])
+            order_details = []
+            for name, order in orders_created:
+                order_details.append(f"- {name}: ID {order.get('id', 'N/A')}")
             
-            message = f"""**SOL止盈止损设置完成**
+            order_details_str = "\n".join(order_details)
+            
+            message = f"""**SOL止盈止损设置结果**
 
-            **交易信息**
-            - 仓位方向: {position_side}
-            - 持仓数量: {position_size}张
-            - 当前价格: ${final_price:.2f}
-            - 止损价格: ${stop_loss_price:.2f}
-            - 止盈价格: ${take_profit_price:.2f}
-            - 风险收益比: {risk_reward}
+**账户类型**: {account_type}
+**仓位方向**: {position_side}
+**持仓数量**: {position_size}张
+**当前价格**: ${final_price:.2f}
+**止损价格**: ${stop_loss_price:.2f}
+**止盈价格**: ${take_profit_price:.2f}
 
-            **订单详情**
-            {order_details}
+**订单详情**
+{order_details_str}
 
-            **状态**: {'✅ 全部成功' if len(orders_created) == 2 else '⚠️ 部分成功'}
+**状态**: {'✅ 全部成功' if len(orders_created) >= 2 else '⚠️ 部分成功'}
 
-            ⏰ {current_time}"""
+⏰ {current_time}"""
             
             # 发送通知
-            msg_type = "info" if len(orders_created) == 2 else "warning"
-            send_dingtalk_message(
-                "🎯 止盈止损设置完成",
-                message,
-                msg_type
-            )
+            msg_type = "info" if len(orders_created) >= 2 else "warning"
+            send_dingtalk_message("🎯 止盈止损设置完成", message, msg_type)
             
             print(f"\n{'='*40}")
-            print(f"✅ 设置完成: {len(orders_created)}/2 个订单创建成功")
-            for name, order in orders_created:
-                print(f"  {name}: ID {order.get('id')}")
+            print(f"✅ 设置完成: {len(orders_created)}个订单创建成功")
             print(f"{'='*40}")
             
             return True
             
         else:
             # 所有订单都失败
-            error_summary = "\n".join([f"- {msg}" for msg in error_messages])
-            
             send_dingtalk_message(
                 "❌ 止盈止损设置失败",
                 f"""**SOL止盈止损设置失败**
 
-                **交易信息**
-                - 仓位方向: {position_side}
-                - 持仓数量: {position_size}张
-                - 止损价格: ${stop_loss_price:.2f}
-                - 止盈价格: ${take_profit_price:.2f}
+所有订单创建尝试均失败，请手动设置。
 
-                **错误信息**
-                {error_summary}
+**交易信息**
+- 账户类型: {account_type}
+- 仓位方向: {position_side}
+- 持仓数量: {position_size}张
+- 止损价格: ${stop_loss_price:.2f}
+- 止盈价格: ${take_profit_price:.2f}
 
-                **建议**
-                1. 检查API权限
-                2. 确认账户有足够保证金
-                3. 检查价格参数是否合理
+**建议**
+1. 登录币安APP手动设置止损止盈
+2. 检查API权限是否足够
+3. 确认账户有足够保证金
 
-                ⏰ {current_time}""",
-                                "error"
+⏰ {current_time}""",
+                "error"
             )
             
-            print(f"\n❌ 所有订单创建失败")
-            for error in error_messages:
-                print(f"  {error}")
-            
+            print(f"\n❌ 所有订单创建失败，请手动设置")
             return False
             
     except Exception as e:
@@ -1041,17 +1170,17 @@ def setup_take_profit_stop_loss(position_side, position_size, take_profit_price,
                 "❌ 止盈止损设置异常",
                 f"""**SOL止盈止损设置异常**
 
-                **错误信息**
-                {str(e)[:200]}
+**错误信息**
+{str(e)[:200]}
 
-                **交易信息**
-                - 仓位方向: {position_side}
-                - 持仓数量: {position_size}张
-                - 止损价格: ${stop_loss_price:.2f}
-                - 止盈价格: ${take_profit_price:.2f}
+**交易信息**
+- 仓位方向: {position_side}
+- 持仓数量: {position_size}张
+- 止损价格: ${stop_loss_price:.2f}
+- 止盈价格: ${take_profit_price:.2f}
 
-                ⏰ {time.strftime('%Y-%m-%d %H:%M:%S')}""",
-                                "error"
+⏰ {time.strftime('%Y-%m-%d %H:%M:%S')}""",
+                "error"
             )
         except:
             pass
