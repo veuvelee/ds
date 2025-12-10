@@ -908,8 +908,6 @@ def setup_take_profit_stop_loss(position_side, position_size, take_profit_price,
         # 获取当前价格
         ticker = exchange.fetch_ticker(symbol)
         current_price = ticker['last']
-        bid_price = ticker['bid']
-        ask_price = ticker['ask']
         
         print(f"\n{'='*50}")
         print(f"🎯 开始设置止盈止损订单")
@@ -918,8 +916,6 @@ def setup_take_profit_stop_loss(position_side, position_size, take_profit_price,
         print(f"仓位方向: {position_side}")
         print(f"持仓数量: {position_size}张")
         print(f"当前价格: ${current_price:.2f}")
-        print(f"买一价: ${bid_price:.2f}")
-        print(f"卖一价: ${ask_price:.2f}")
         print(f"止损价格: ${stop_loss_price:.2f}")
         print(f"止盈价格: ${take_profit_price:.2f}")
         
