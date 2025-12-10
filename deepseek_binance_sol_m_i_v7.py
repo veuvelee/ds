@@ -826,7 +826,7 @@ def setup_take_profit_stop_loss(position_side, position_size, take_profit_price,
             params={
                 'stopPrice': stop_loss_price,
                 'closePosition': True,  # 币安期货算法订单可能需要这个
-                'workingType': 'MARK_PRICE',
+                'workingType': 'CONTRACT_PRICE',
                 'priceProtect': True
             }
         )
