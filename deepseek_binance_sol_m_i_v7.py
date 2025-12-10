@@ -841,14 +841,17 @@ def setup_take_profit_stop_loss(position_side, position_size, take_profit_price,
         # 设置止损订单（市价止损）
         stop_loss_order = exchange.create_order(
             symbol,
-            'stop_market',
+            'STOP_MARKET',
             stop_loss_side,
             position_size,
             None,
             {
                 'stopPrice': stop_loss_price,
                 'reduceOnly': True,
-                'closePosition': False
+                'closePosition': False,
+                'workingType': 'CONTRACT_PRICE',  # 添加workingType参数
+                'positionSide': 'BOTH',  # 指定仓位方向
+                'type': 'STOP_MARKET'
             }
         )
         print(f"✅ 止损订单设置成功: ID {stop_loss_order['id']}")
