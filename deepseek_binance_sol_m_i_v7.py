@@ -815,7 +815,7 @@ def cancel_existing_conditional_orders():
         print(f"❌ 取消条件订单失败: {e}")
         return 0
 
-def setup_take_profit_stop_loss_final(position_side, position_size, take_profit_price, stop_loss_price):
+def setup_take_profit_stop_loss(position_side, position_size, take_profit_price, stop_loss_price):
     """设置止盈止损订单（最终修复版）"""
     
     def get_position_side_for_user():
