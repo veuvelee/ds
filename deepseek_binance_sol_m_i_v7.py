@@ -1,10 +1,3 @@
-## 主要修改内容：
-#1、修复止盈止损设置：使用Binance支持的普通限价订单替代算法订单，通过reduceOnly=True参数确保只减少持仓
-#2、添加价格验证：根据持仓方向自动验证止损止盈价格的合理性
-#3、优化订单取消逻辑：更好地识别和取消条件订单
-#4、添加等待时间：在设置止盈止损前等待订单执行完成
-#5、改进错误处理：当一种方法失败时尝试备选方案
-
 import os
 import time
 import schedule
@@ -778,355 +771,94 @@ def cancel_existing_conditional_orders():
     """取消所有现有的条件订单（止盈止损）"""
     try:
         orders = exchange.fetch_open_orders(TRADE_CONFIG['symbol'])
-        cancelled_count = 0
-        
         for order in orders:
-            try:
-                # 检查是否为条件订单或止盈止损相关的订单
-                order_type = order.get('type', '')
-                order_info = order.get('info', {})
-                
-                # 检查是否是止损止盈相关订单
-                is_conditional = (
-                    'stop' in order_type.lower() or 
-                    'take' in order_type.lower() or
-                    'reduceOnly' in order_info or
-                    order.get('reduceOnly', False)
-                )
-                
-                if is_conditional:
-                    print(f"取消条件订单: {order['id']} - {order_type}")
-                    exchange.cancel_order(order['id'], TRADE_CONFIG['symbol'])
-                    cancelled_count += 1
-                    time.sleep(0.1)  # 避免API限制
-                    
-            except Exception as e:
-                print(f"取消订单 {order['id']} 失败: {e}")
-                continue
-        
-        if cancelled_count > 0:
-            print(f"✅ 已取消 {cancelled_count} 个条件订单")
-        else:
-            print("ℹ️ 没有找到条件订单需要取消")
-            
-        return cancelled_count
-        
+            if order['type'] in ['stop_market', 'take_profit_market', 'stop_limit', 'take_profit']:
+                print(f"取消现有条件订单: {order['id']} - {order['type']}")
+                exchange.cancel_order(order['id'], TRADE_CONFIG['symbol'])
+        print("✅ 已取消所有现有条件订单")
     except Exception as e:
         print(f"❌ 取消条件订单失败: {e}")
-        return 0
 
 def setup_take_profit_stop_loss(position_side, position_size, take_profit_price, stop_loss_price):
-    """设置止盈止损订单（最终修复版）"""
-    
-    def get_position_side_for_user():
-        """
-        获取用户当前设置的仓位方向模式
-        币安支持：BOTH（单向持仓）或 LONG/SHORT（双向持仓）
-        """
-        try:
-            # 尝试获取账户信息来推断仓位模式
-            account_info = exchange.fapiPrivateGetAccount()
-            position_mode = account_info.get('dualSidePosition', False)
-            # False 表示单向持仓，True 表示双向持仓
-            return 'BOTH' if not position_mode else None
-        except:
-            # 默认使用 BOTH（单向持仓）
-            return 'BOTH'
-    
-    def create_binance_algo_order(order_type, side, stop_price, tag=''):
-        """
-        使用币安算法订单API创建订单
-        """
-        try:
-            symbol = TRADE_CONFIG['symbol']
-            
-            # 转换交易对格式：SOL/USDT -> SOLUSDT
-            binance_symbol = symbol.replace('/', '')
-            
-            # 获取正确的仓位方向
-            position_side_param = get_position_side_for_user()
-            
-            # 构建算法订单请求
-            # 币安算法订单API要求特定参数
-            params = {
-                'symbol': binance_symbol,
-                'side': side.upper(),
-                'type': order_type,
-                'quantity': float(position_size),
-                'stopPrice': float(stop_price),
-                'timeInForce': 'GTC',
-                'workingType': 'MARK_PRICE',
-                'priceProtect': True,
-            }
-            
-            # 只有在确定为双向持仓模式时才添加positionSide
-            if position_side_param and position_side_param != 'BOTH':
-                params['positionSide'] = position_side_param
-            
-            print(f"📤 发送算法订单请求:")
-            print(f"   类型: {order_type}")
-            print(f"   方向: {side}")
-            print(f"   数量: {position_size}")
-            print(f"   触发价: {stop_price}")
-            
-            # 使用币安算法订单端点
-            # 币安期货算法订单端点是：/fapi/v1/algo/order
-            response = exchange.privatePostAlgoFuturesNewOrderVp(params)
-            
-            order_info = {
-                'id': response.get('orderId', response.get('clientOrderId')),
-                'status': 'NEW',
-                'type': order_type,
-                'side': side,
-                'price': stop_price,
-                'amount': position_size,
-                'info': response
-            }
-            
-            print(f"✅ 算法订单创建成功: ID {order_info['id']}")
-            return order_info
-            
-        except Exception as e:
-            print(f"❌ 算法订单创建失败: {e}")
-            raise
-    
-    def create_standard_limit_order(side, price):
-        """
-        创建标准限价单（不使用positionSide参数）
-        """
-        try:
-            symbol = TRADE_CONFIG['symbol']
-            
-            order = exchange.create_order(
-                symbol,
-                'LIMIT',
-                side,
-                position_size,
-                price,
-                {
-                    'timeInForce': 'GTC'
-                    # 注意：不添加reduceOnly和positionSide参数
-                }
-            )
-            
-            return order
-            
-        except Exception as e:
-            print(f"❌ 限价单创建失败: {e}")
-            raise
-    
+    """设置止盈止损订单"""
     try:
         symbol = TRADE_CONFIG['symbol']
+        current_price = exchange.fetch_ticker(symbol)['last']
         
-        # 获取当前价格
-        try:
-            ticker = exchange.fetch_ticker(symbol)
-            current_price = float(ticker.get('last') or ticker.get('close') or 0)
-        except:
-            current_price = 0.0
-        
-        print(f"\n{'='*50}")
-        print(f"🎯 设置止盈止损订单")
-        print(f"{'='*50}")
-        print(f"交易对: {symbol}")
-        print(f"仓位方向: {position_side}")
-        print(f"持仓数量: {position_size}张")
-        print(f"当前价格: ${current_price:.2f}")
-        print(f"止损价格: ${stop_loss_price:.2f}")
-        print(f"止盈价格: ${take_profit_price:.2f}")
-        
-        # 确定订单方向
+        print(f"🎯 设置止盈止损:")
+        print(f"   - 方向: {position_side}")
+        print(f"   - 数量: {position_size}张")
+        print(f"   - 止盈: ${take_profit_price:.2f}")
+        print(f"   - 止损: ${stop_loss_price:.2f}")
+        print(f"   - 当前价: ${current_price:.2f}")
+
+        # 设置止损订单
         if position_side == 'long':
-            exit_side = 'sell'  # 多头平仓
+            # 多头：止损卖单，止盈卖单
+            stop_loss_side = 'sell'
+            take_profit_side = 'sell'
         else:
-            exit_side = 'buy'   # 空头平仓
-        
-        orders_created = []
-        
-        # ========== 方案1：尝试使用算法订单API ==========
-        print(f"\n🔄 尝试使用币安算法订单API...")
-        
-        # 创建止损算法订单
-        try:
-            print(f"📉 创建止损算法订单...")
-            sl_order = create_binance_algo_order(
-                order_type='STOP_MARKET',
-                side=exit_side,
-                stop_price=stop_loss_price,
-                tag='stop_loss'
-            )
-            orders_created.append(('止损算法订单', sl_order))
-        except Exception as sl_error:
-            print(f"❌ 止损算法订单失败: {sl_error}")
-        
-        # 创建止盈算法订单
-        try:
-            print(f"📈 创建止盈算法订单...")
-            tp_order = create_binance_algo_order(
-                order_type='TAKE_PROFIT_MARKET',
-                side=exit_side,
-                stop_price=take_profit_price,
-                tag='take_profit'
-            )
-            orders_created.append(('止盈算法订单', tp_order))
-        except Exception as tp_error:
-            print(f"❌ 止盈算法订单失败: {tp_error}")
-        
-        # ========== 方案2：如果算法订单失败，尝试替代方案 ==========
-        if len(orders_created) < 2:
-            print(f"\n🔄 算法订单不完整，尝试替代方案...")
-            
-            # 创建限价止盈单（替代止盈）
-            if not any(name == '止盈算法订单' for name, _ in orders_created):
-                try:
-                    print(f"📈 创建限价止盈单...")
-                    tp_limit_order = create_standard_limit_order(
-                        side=exit_side,
-                        price=take_profit_price
-                    )
-                    orders_created.append(('限价止盈单', tp_limit_order))
-                except Exception as tp_limit_error:
-                    print(f"❌ 限价止盈单失败: {tp_limit_error}")
-            
-            # 对于止损，我们无法使用限价单（会立即成交）
-            # 所以只能使用算法订单，如果失败则需要手动监控
-            if not any(name == '止损算法订单' for name, _ in orders_created):
-                print(f"⚠️ 止损算法订单失败，无法创建有效的止损订单")
-                print(f"⚠️ 请手动设置止损或使用价格监控")
-        
-        # ========== 结果处理 ==========
-        import time
-        current_time = time.strftime('%Y-%m-%d %H:%M:%S')
-        
-        if orders_created:
-            # 重新获取当前价格
-            try:
-                ticker = exchange.fetch_ticker(symbol)
-                final_price = float(ticker.get('last') or ticker.get('close') or current_price)
-            except:
-                final_price = current_price
-            
-            # 构建消息
-            order_details = []
-            for name, order in orders_created:
-                order_id = order.get('id', 'N/A')
-                order_details.append(f"- {name}: ID {order_id}")
-            
-            order_details_str = "\n".join(order_details)
-            
-            # 计算盈亏比
-            if current_price > 0:
-                if position_side == 'long':
-                    risk = current_price - stop_loss_price
-                    reward = take_profit_price - current_price
-                else:
-                    risk = stop_loss_price - current_price
-                    reward = current_price - take_profit_price
-                
-                if risk > 0:
-                    risk_reward = round(reward / risk, 2)
-                else:
-                    risk_reward = "N/A"
-            else:
-                risk_reward = "N/A"
-            
-            success_count = len(orders_created)
-            
-            message = f"""**SOL止盈止损设置结果**
+            # 空头：止损买单，止盈买单
+            stop_loss_side = 'buy'
+            take_profit_side = 'buy'
 
-**交易信息**
-- 仓位方向: {position_side}
-- 持仓数量: {position_size}张
-- 当前价格: ${final_price:.2f}
-- 止损价格: ${stop_loss_price:.2f}
-- 止盈价格: ${take_profit_price:.2f}
-- 风险收益比: {risk_reward}
+        # 设置止损订单（市价止损）
+        stop_loss_order = exchange.create_order(
+            symbol,
+            'STOP_MARKET',
+            stop_loss_side,
+            position_size,
+            None,
+            {
+                'stopPrice': stop_loss_price,
+                'timeInForce': 'GTC'
+                #'reduceOnly': True,
+                #'closePosition': False
+            }
+        )
+        print(f"✅ 止损订单设置成功: ID {stop_loss_order['id']}")
 
-**订单详情**
-{order_details_str}
+        # 设置止盈订单（限价止盈）
+        take_profit_order = exchange.create_order(
+            symbol,
+            'LIMIT',
+            take_profit_side,
+            position_size,
+            take_profit_price,
+            {
+                #'reduceOnly': True,
+                'timeInForce': 'GTC'  # 一直有效直至取消
+            }
+        )
+        print(f"✅ 止盈订单设置成功: ID {take_profit_order['id']}")
 
-**状态**: {success_count}/2 个订单创建成功
-- {'✅ 止损订单: 已设置' if any(name == '止损算法订单' for name, _ in orders_created) else '⚠️ 止损订单: 未设置'}
-- {'✅ 止盈订单: 已设置' if any('止盈' in name for name, _ in orders_created) else '⚠️ 止盈订单: 未设置'}
+        # 发送钉钉通知
+        send_dingtalk_message(
+            "🎯 止盈止损设置完成",
+            f"**SOL止盈止损设置成功**\n\n"
+            f"- 持仓方向: {position_side}\n"
+            f"- 持仓数量: {position_size}张\n"
+            f"- 止损价格: ${stop_loss_price:.2f}\n"
+            f"- 止盈价格: ${take_profit_price:.2f}\n"
+            f"- 当前价格: ${current_price:.2f}\n"
+            f"- 止损订单: {stop_loss_order['id']}\n"
+            f"- 止盈订单: {take_profit_order['id']}",
+            "info"
+        )
 
-**建议**
-{'✅ 所有订单已设置，系统将自动执行' if success_count == 2 else '⚠️ 部分订单未设置成功，请手动监控价格'}
+        return True
 
-⏰ {current_time}"""
-            
-            # 发送通知
-            msg_type = "info" if success_count == 2 else "warning"
-            send_dingtalk_message("🎯 止盈止损设置结果", message, msg_type)
-            
-            print(f"\n{'='*50}")
-            print(f"📊 设置结果: {success_count}/2 个订单成功")
-            for name, order in orders_created:
-                print(f"  {name}: ID {order.get('id', 'N/A')}")
-            print(f"{'='*50}")
-            
-            return True if success_count > 0 else False
-            
-        else:
-            # 所有订单都失败
-            error_message = f"""**SOL止盈止损设置失败**
-
-所有订单创建尝试均失败。
-
-**交易信息**
-- 仓位方向: {position_side}
-- 持仓数量: {position_size}张
-- 止损价格: ${stop_loss_price:.2f}
-- 止盈价格: ${take_profit_price:.2f}
-- 当前价格: ${current_price:.2f}
-
-**可能原因**
-1. API权限不足，无法使用算法订单接口
-2. 账户设置不匹配（如持仓模式）
-3. 价格参数不合理
-
-**解决方案**
-1. 登录币安APP手动设置止损止盈
-2. 检查并调整账户的持仓模式设置
-3. 确认API密钥有算法订单权限
-
-⏰ {current_time}"""
-            
-            send_dingtalk_message("❌ 止盈止损设置失败", error_message, "error")
-            
-            print(f"\n❌ 所有订单创建失败")
-            print(f"请登录币安APP手动设置:")
-            print(f"  止损价: ${stop_loss_price:.2f}")
-            print(f"  止盈价: ${take_profit_price:.2f}")
-            
-            return False
-            
     except Exception as e:
-        print(f"❌ 设置过程发生错误: {e}")
-        import traceback
-        traceback.print_exc()
-        
-        # 发送错误通知
-        try:
-            import time
-            send_dingtalk_message(
-                "❌ 止盈止损设置异常",
-                f"""**SOL止盈止损设置异常**
-
-**错误信息**
-{str(e)[:200]}
-
-**交易信息**
-- 仓位方向: {position_side}
-- 持仓数量: {position_size}张
-- 止损价格: ${stop_loss_price:.2f}
-- 止盈价格: ${take_profit_price:.2f}
-
-⏰ {time.strftime('%Y-%m-%d %H:%M:%S')}""",
-                "error"
-            )
-        except:
-            pass
-        
+        error_msg = f"设置止盈止损失败: {e}"
+        print(f"❌ {error_msg}")
+        send_dingtalk_message(
+            "❌ 止盈止损设置失败",
+            f"**SOL止盈止损设置失败**\n\n"
+            f"- 错误信息: {str(e)}\n"
+            f"- 持仓方向: {position_side}\n"
+            f"- 持仓数量: {position_size}张",
+            "error"
+        )
         return False
     
 def update_existing_orders(current_position, signal_data):
@@ -1159,7 +891,7 @@ def execute_intelligent_trade(signal_data, price_data):
     print(f"理由: {signal_data['reason']}")
     print(f"当前持仓: {current_position}")
 
-    # 发送交易信号到钉钉
+    # 🆕 发送交易信号到钉钉
     signal_emojis = {
         'BUY': '🟢',
         'SELL': '🔴', 
@@ -1189,7 +921,7 @@ def execute_intelligent_trade(signal_data, price_data):
         return
 
     try:
-        # 先取消所有现有的条件订单
+        # 🆕 先取消所有现有的条件订单
         cancel_existing_conditional_orders()
         
         # Binance交易执行逻辑
@@ -1207,15 +939,20 @@ def execute_intelligent_trade(signal_data, price_data):
                         {'reduceOnly': True}
                     )
                     time.sleep(1)
-                    
-                # 开多仓
-                print(f"开多仓 {position_size:.2f} 张...")
-                exchange.create_order(
-                    TRADE_CONFIG['symbol'],
-                    'market',
-                    'buy',
-                    position_size
-                )
+                    exchange.create_order(
+                        TRADE_CONFIG['symbol'],
+                        'market',
+                        'buy',
+                        position_size
+                    )
+                else:
+                    print("直接开多仓")
+                    exchange.create_order(
+                        TRADE_CONFIG['symbol'],
+                        'market',
+                        'buy',
+                        position_size
+                    )
 
             elif current_position and current_position['side'] == 'long':
                 # 调整多仓仓位
@@ -1254,15 +991,9 @@ def execute_intelligent_trade(signal_data, price_data):
                     position_size
                 )
 
-            # 设置多头止盈止损
+            # 🆕 设置多头止盈止损
             if position_size > 0:
-                # 等待订单执行完成
-                time.sleep(1)
-                # 获取最新持仓信息
-                updated_position = get_current_position()
-                if updated_position and updated_position['side'] == 'long':
-                    setup_take_profit_stop_loss('long', updated_position['size'], 
-                                               signal_data['take_profit'], signal_data['stop_loss'])
+                setup_take_profit_stop_loss('long', position_size, signal_data['take_profit'], signal_data['stop_loss'])
 
         elif signal_data['signal'] == 'SELL':
             if current_position and current_position['side'] == 'long':
@@ -1278,15 +1009,20 @@ def execute_intelligent_trade(signal_data, price_data):
                         {'reduceOnly': True}
                     )
                     time.sleep(1)
-                    
-                # 开空仓
-                print(f"开空仓 {position_size:.2f} 张...")
-                exchange.create_order(
-                    TRADE_CONFIG['symbol'],
-                    'market',
-                    'sell',
-                    position_size
-                )
+                    exchange.create_order(
+                        TRADE_CONFIG['symbol'],
+                        'market',
+                        'sell',
+                        position_size
+                    )
+                else:
+                    print("直接开空仓")
+                    exchange.create_order(
+                        TRADE_CONFIG['symbol'],
+                        'market',
+                        'sell',
+                        position_size
+                    )
 
             elif current_position and current_position['side'] == 'short':
                 # 调整空仓仓位
@@ -1325,26 +1061,20 @@ def execute_intelligent_trade(signal_data, price_data):
                     position_size
                 )
 
-            # 设置空头止盈止损
+            # 🆕 设置空头止盈止损
             if position_size > 0:
-                # 等待订单执行完成
-                time.sleep(1)
-                # 获取最新持仓信息
-                updated_position = get_current_position()
-                if updated_position and updated_position['side'] == 'short':
-                    setup_take_profit_stop_loss('short', updated_position['size'], 
-                                               signal_data['take_profit'], signal_data['stop_loss'])
+                setup_take_profit_stop_loss('short', position_size, signal_data['take_profit'], signal_data['stop_loss'])
 
         elif signal_data['signal'] == 'HOLD':
             print("建议观望，不执行交易")
-            # 即使HOLD也检查是否需要更新止盈止损
+            # 🆕 即使HOLD也检查是否需要更新止盈止损
             if current_position and current_position['size'] > 0:
                 update_existing_orders(current_position, signal_data)
             return
 
         print("智能交易执行成功")
         
-        # 发送交易执行结果到钉钉
+        # 🆕 发送交易执行结果到钉钉
         send_dingtalk_message(
             "✅ 交易执行完成",
             f"**SOL交易执行成功**\n\n"
@@ -1365,7 +1095,7 @@ def execute_intelligent_trade(signal_data, price_data):
         error_msg = f"交易执行失败: {e}"
         print(f"❌ {error_msg}")
         
-        # 发送交易失败通知到钉钉
+        # 🆕 发送交易失败通知到钉钉
         send_dingtalk_message(
             "❌ 交易执行失败",
             f"**SOL交易执行失败**\n\n"
@@ -1378,6 +1108,7 @@ def execute_intelligent_trade(signal_data, price_data):
         
         import traceback
         traceback.print_exc()
+
 
 def analyze_with_deepseek_with_retry(price_data, max_retries=2):
     """带重试的DeepSeek分析"""
