@@ -803,16 +803,31 @@ def setup_take_profit_stop_loss(position_side, position_size, take_profit_price,
             take_profit_side = 'buy'
 
         # 设置止损订单（市价止损）
+        # stop_loss_order = exchange.create_order(
+        #     symbol,
+        #     'MARKET',
+        #     stop_loss_side,
+        #     position_size,
+        #     None,
+        #     {
+        #         'stopLossPrice': stop_loss_price,
+        #         'timeInForce': 'GTC'
+        #         #'reduceOnly': True,
+        #         #'closePosition': False
+        #     }
+        # )
+        # 方法1：使用ccxt的create_order，但指定正确的参数
         stop_loss_order = exchange.create_order(
-            symbol,
-            'stop_market',
-            stop_loss_side,
-            position_size,
-            None,
-            {
+            symbol=symbol,
+            type='STOP_MARKET',
+            side=stop_loss_side,
+            amount=position_size,
+            price=None,
+            params={
                 'stopPrice': stop_loss_price,
-                'reduceOnly': True,
-                'closePosition': False
+                'closePosition': True,  # 币安期货算法订单可能需要这个
+                'workingType': 'CONTRACT_PRICE',
+                'priceProtect': True
             }
         )
         print(f"✅ 止损订单设置成功: ID {stop_loss_order['id']}")
@@ -820,12 +835,13 @@ def setup_take_profit_stop_loss(position_side, position_size, take_profit_price,
         # 设置止盈订单（限价止盈）
         take_profit_order = exchange.create_order(
             symbol,
-            'limit',
+            'MARKET',
             take_profit_side,
             position_size,
-            take_profit_price,
+            None,
             {
-                'reduceOnly': True,
+                #'reduceOnly': True,
+                'takeProfitPrice': take_profit_price,
                 'timeInForce': 'GTC'  # 一直有效直至取消
             }
         )
