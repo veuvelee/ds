@@ -805,12 +805,12 @@ def setup_take_profit_stop_loss(position_side, position_size, take_profit_price,
         # 设置止损订单（市价止损）
         stop_loss_order = exchange.create_order(
             symbol,
-            'STOP_MARKET',
+            'LIMIT',
             stop_loss_side,
             position_size,
             None,
             {
-                'stopPrice': stop_loss_price,
+                'stopLossPrice': stop_loss_price,
                 'timeInForce': 'GTC'
                 #'reduceOnly': True,
                 #'closePosition': False
@@ -824,9 +824,10 @@ def setup_take_profit_stop_loss(position_side, position_size, take_profit_price,
             'LIMIT',
             take_profit_side,
             position_size,
-            take_profit_price,
+            None,
             {
                 #'reduceOnly': True,
+                'takeProfitPrice': take_profit_price,
                 'timeInForce': 'GTC'  # 一直有效直至取消
             }
         )
