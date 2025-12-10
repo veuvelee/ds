@@ -805,7 +805,7 @@ def setup_take_profit_stop_loss(position_side, position_size, take_profit_price,
         # 设置止损订单（市价止损）
         stop_loss_order = exchange.create_order(
             symbol,
-            'LIMIT',
+            'MARKET',
             stop_loss_side,
             position_size,
             None,
@@ -821,7 +821,7 @@ def setup_take_profit_stop_loss(position_side, position_size, take_profit_price,
         # 设置止盈订单（限价止盈）
         take_profit_order = exchange.create_order(
             symbol,
-            'LIMIT',
+            'MARKET',
             take_profit_side,
             position_size,
             None,
