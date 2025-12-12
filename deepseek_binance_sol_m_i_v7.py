@@ -986,6 +986,10 @@ def execute_intelligent_trade(signal_data, price_data):
     if TRADE_CONFIG['test_mode']:
         print("测试模式 - 仅模拟交易")
         return
+    
+    if signal_data['signal'] == 'HOLD':
+        print("建议观望，不执行交易")
+        return
 
     try:
         # 🆕 先取消所有现有的条件订单
