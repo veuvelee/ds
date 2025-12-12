@@ -30,5 +30,8 @@ TRADE_CONFIG = {
     'symbol': 'SOL/USDT:USDT'
 }
 
-markets = exchange.load_markets()
-print(markets)
+params = {'status': 'open'}
+# orders = exchange.fetch_open_orders(TRADE_CONFIG['symbol'])
+orders = exchange.fetch_orders(symbol=TRADE_CONFIG['symbol'], since=None, limit=None, params=params)
+# params = {'algoType': 'conditional'}
+print(f"orders: {orders}")
