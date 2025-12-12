@@ -817,7 +817,7 @@ def cancel_existing_conditional_orders(side=None):
                 print(f"取消现有条件订单: {order['id']} - {order['type']} - {order.get('side', 'N/A')}")
                 
                 try:
-                    exchange.cancel_order(order['id'], TRADE_CONFIG['symbol'])
+                    exchange.cancel_order(order['id'], TRADE_CONFIG['symbol'], params = params)
                     cancelled_count += 1
                     # 添加短暂延迟避免API限频
                     time.sleep(0.1)
