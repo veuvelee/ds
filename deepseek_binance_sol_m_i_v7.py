@@ -795,7 +795,7 @@ def cancel_existing_conditional_orders(side=None):
         
         for order in orders:
             
-            print(f"order: {order}")
+            # print(f"order: {order}")
             
             # 检查是否为GTE类型（Good Till Execute）
             is_gte = order.get('timeInForce', '') in ['GTC', 'GTE', 'GTX'] or order.get('reduceOnly', False)
