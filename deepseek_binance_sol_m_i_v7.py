@@ -788,7 +788,7 @@ def cancel_existing_conditional_orders(side=None):
     """
     try:
         params = {'stop': True}
-        orders = exchange.fetch_open_orders(TRADE_CONFIG['symbol'])
+        orders = exchange.fetch_open_orders(TRADE_CONFIG['symbol'], params = params)
         # params = {'algoType': 'conditional'}
         # params = {'status': 'open'}
         cancelled_count = 0
