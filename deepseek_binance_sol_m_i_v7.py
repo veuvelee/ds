@@ -767,17 +767,65 @@ def analyze_with_deepseek(price_data):
         print(f"DeepSeek分析失败: {e}")
         return create_fallback_signal(price_data)
 
-def cancel_existing_conditional_orders():
-    """取消所有现有的条件订单（止盈止损）"""
+# def cancel_existing_conditional_orders():
+#     """取消所有现有的条件订单（止盈止损）"""
+#     try:
+#         orders = exchange.fetch_open_orders(TRADE_CONFIG['symbol'])
+#         for order in orders:
+#             if order['type'] in ['stop_market', 'take_profit_market', 'stop_limit', 'take_profit']:
+#                 print(f"取消现有条件订单: {order['id']} - {order['type']}")
+#                 exchange.cancel_order(order['id'], TRADE_CONFIG['symbol'])
+#         print("✅ 已取消所有现有条件订单")
+#     except Exception as e:
+#         print(f"❌ 取消条件订单失败: {e}")
+def cancel_existing_conditional_orders(side=None):
+    """
+    取消所有现有的条件订单（止盈止损）
+    
+    Args:
+        side: 指定取消的方向，可选 'buy'（止损）或 'sell'（止盈）
+               如果为None，则取消所有条件订单
+    """
     try:
         orders = exchange.fetch_open_orders(TRADE_CONFIG['symbol'])
+        cancelled_count = 0
+        
         for order in orders:
-            if order['type'] in ['stop_market', 'take_profit_market', 'stop_limit', 'take_profit']:
-                print(f"取消现有条件订单: {order['id']} - {order['type']}")
-                exchange.cancel_order(order['id'], TRADE_CONFIG['symbol'])
-        print("✅ 已取消所有现有条件订单")
+            # 检查是否为条件订单类型
+            is_conditional = order['type'] in ['stop_market', 'take_profit_market', 
+                                              'stop_limit', 'take_profit', 'stop', 'stop_loss']
+            
+            # 检查是否为GTE类型（Good Till Execute）
+            is_gte = order.get('timeInForce', '') in ['GTC', 'GTE', 'GTX'] or order.get('reduceOnly', False)
+            
+            # 检查是否带closePosition（从info中获取）
+            info = order.get('info', {})
+            is_close_position = info.get('closePosition') == 'true' or order.get('reduceOnly', False)
+            
+            # 检查方向匹配
+            if side is not None:
+                order_side = order.get('side', '').lower()
+                if side.lower() != order_side:
+                    continue
+            
+            # 取消逻辑：如果满足条件订单 + (GTE或closePosition)特征
+            if is_conditional and (is_gte or is_close_position):
+                print(f"取消现有条件订单: {order['id']} - {order['type']} - {order.get('side', 'N/A')}")
+                
+                try:
+                    exchange.cancel_order(order['id'], TRADE_CONFIG['symbol'])
+                    cancelled_count += 1
+                    # 添加短暂延迟避免API限频
+                    time.sleep(0.1)
+                except Exception as cancel_error:
+                    print(f"取消订单 {order['id']} 失败: {cancel_error}")
+        
+        print(f"✅ 已取消 {cancelled_count} 个条件订单")
+        return cancelled_count
+        
     except Exception as e:
-        print(f"❌ 取消条件订单失败: {e}")
+        print(f"❌ 获取或取消条件订单失败: {e}")
+        return 0
 
 def setup_take_profit_stop_loss(position_side, position_size, take_profit_price, stop_loss_price):
     """设置止盈止损订单"""
