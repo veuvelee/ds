@@ -787,9 +787,9 @@ def cancel_existing_conditional_orders(side=None):
                如果为None，则取消所有条件订单
     """
     try:
-        orders = exchange.fetch_open_orders(TRADE_CONFIG['symbol'])
+        params = {'algoType': 'conditional'}
+        orders = exchange.fetch_open_orders(TRADE_CONFIG['symbol'], params=params)
         print(f"orders: {orders}")
-        print(f"orders2: {exchange.fetch_open_orders('SOL/USDT')}")
         cancelled_count = 0
         
         for order in orders:
