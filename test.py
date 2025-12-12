@@ -32,6 +32,15 @@ TRADE_CONFIG = {
 
 params = {'status': 'open'}
 # orders = exchange.fetch_open_orders(TRADE_CONFIG['symbol'])
-orders = exchange.fetch_open_orders(symbol=TRADE_CONFIG['symbol'], since=None, limit=None, params=params)
-# params = {'algoType': 'conditional'}
+# orders = exchange.fetch_orders(symbol=TRADE_CONFIG['symbol'], since=None, limit=None, params=params)
+# 方法1：使用stop参数
+params = {'stop': True}
+symbol = TRADE_CONFIG['symbol']
+orders = exchange.fetch_open_orders(symbol, params=params)
 print(f"orders: {orders}")
+
+# 方法2：使用algo参数
+params = {'algo': True}
+algo_orders = exchange.fetch_open_orders(symbol, params=params)
+# params = {'algoType': 'conditional'}
+print(f"algo_orders: {algo_orders}")
