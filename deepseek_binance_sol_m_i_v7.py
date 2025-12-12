@@ -794,16 +794,16 @@ def cancel_existing_conditional_orders(side=None):
         cancelled_count = 0
         
         for order in orders:
-            # 检查是否为条件订单类型
-            is_conditional = order['algoType'] in ['CONDITIONAL']
             
             print(f"order: {order}")
             
             # 检查是否为GTE类型（Good Till Execute）
             is_gte = order.get('timeInForce', '') in ['GTC', 'GTE', 'GTX'] or order.get('reduceOnly', False)
             
-            # 检查是否带closePosition（从info中获取）
             info = order.get('info', {})
+            # 检查是否为条件订单类型
+            is_conditional = info['algoType'] == 'CONDITIONAL'
+            # 检查是否带closePosition（从info中获取）
             is_close_position = info.get('closePosition') == 'true' or order.get('reduceOnly', False)
             
             # 检查方向匹配
