@@ -1135,8 +1135,8 @@ def execute_intelligent_trade(signal_data, price_data):
         elif signal_data['signal'] == 'HOLD':
             print("建议观望，不执行交易")
             # 🆕 即使HOLD也检查是否需要更新止盈止损
-            if current_position and current_position['size'] > 0:
-                update_existing_orders(current_position, signal_data)
+            # if current_position and current_position['size'] > 0:
+                # update_existing_orders(current_position, signal_data)
             return
 
         print("智能交易执行成功")
