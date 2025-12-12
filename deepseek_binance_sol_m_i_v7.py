@@ -789,6 +789,7 @@ def cancel_existing_conditional_orders(side=None):
     try:
         orders = exchange.fetch_open_orders(TRADE_CONFIG['symbol'])
         print(f"orders: {orders}")
+        print(f"orders2: {exchange.fetch_open_orders('SOL/USDT')}")
         cancelled_count = 0
         
         for order in orders:
