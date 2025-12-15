@@ -181,7 +181,7 @@ class DingTalkManager:
                 current_time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 
                 # 构建完整消息
-                full_message = f"### {emoji} {title}\n\n{message}\n\n---\n⏰ {current_time_str}"
+                full_message = f"### {emoji} [{self.user}]  {title}\n\n{message}\n\n---\n⏰ {current_time_str}"
                 
                 # 生成签名（如果有secret）
                 webhook_url = self.webhook
