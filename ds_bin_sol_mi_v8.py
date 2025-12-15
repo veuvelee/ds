@@ -1087,8 +1087,9 @@ class AIAnalyzer:
                 temperature=0.2,
                 max_tokens=500
             )
-            
-            return response.choices[0].message.content
+            result = response.choices[0].message.content
+            logger.info(f"DeepSeek原始回复: {result}")
+            return result
             
         except Exception as e:
             logger.error(f"调用AI API失败: {e}")
