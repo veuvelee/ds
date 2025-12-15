@@ -449,6 +449,8 @@ class RiskManager:
                 current_balance = self._get_current_balance()
                 position_value = position['size'] * position['entry_price']
                 position_ratio = position_value / current_balance * 100
+
+                logger.info(f"position:{position} current_balance:{current_balance} position_value:{position_value} position_ratio:{position_ratio}")
                 
                 if position_ratio > self.config.position_config['max_position_ratio']:
                     return False, f"仓位比例{position_ratio:.1f}%超过限制"
