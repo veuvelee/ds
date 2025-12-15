@@ -1142,7 +1142,7 @@ class AIAnalyzer:
             logger.error(f"解析AI响应失败: {e}")
             return None
     
-    def clean_json_string(json_str: str) -> str:
+    def _clean_json_string(json_str: str) -> str:
         """简洁的JSON字符串清理函数"""
         try:
             # 先尝试直接解析
