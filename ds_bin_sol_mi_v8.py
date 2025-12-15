@@ -1479,7 +1479,8 @@ class EnhancedTradingBot:
         self.dingtalk = DingTalkManager(
             webhook=os.getenv('DINGTALK_WEBHOOK'),
             secret=os.getenv('DINGTALK_SECRET'),
-            enable=True
+            enable=True,
+            user=self.config.user
         )
         
         # 初始化订单管理器
