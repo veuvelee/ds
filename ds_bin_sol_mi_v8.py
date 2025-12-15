@@ -1142,19 +1142,50 @@ class AIAnalyzer:
             logger.error(f"解析AI响应失败: {e}")
             return None
     
-    def _clean_json_string(self, json_str: str) -> str:
-        """清理JSON字符串"""
-        # 替换单引号为双引号
-        json_str = json_str.replace("'", '"')
+    def clean_json_string(json_str: str) -> str:
+        """简洁的JSON字符串清理函数"""
+        try:
+            # 先尝试直接解析
+            json.loads(json_str)
+            return json_str
+        except json.JSONDecodeError:
+            pass
         
-        # 修复未加引号的键
-        json_str = re.sub(r'(\w+):', r'"\1":', json_str)
+        # 1. 用状态机智能替换字符串边界单引号
+        result = []
+        in_string = False
+        string_quote = None
         
-        # 移除末尾的逗号
-        json_str = re.sub(r',\s*}', '}', json_str)
-        json_str = re.sub(r',\s*]', ']', json_str)
+        for i, char in enumerate(json_str):
+            if char in ('"', "'"):
+                if i > 0 and json_str[i-1] == '\\':
+                    # 转义引号，直接添加
+                    result.append(char)
+                elif not in_string:
+                    # 字符串开始
+                    in_string = True
+                    string_quote = char
+                    result.append('"')  # 统一用双引号
+                elif char == string_quote:
+                    # 字符串结束
+                    in_string = False
+                    string_quote = None
+                    result.append('"')  # 统一用双引号
+                else:
+                    # 字符串内的其他引号
+                    result.append(char)
+            else:
+                result.append(char)
         
-        return json_str
+        cleaned = ''.join(result)
+        
+        # 2. 给键名加双引号（如果缺失）
+        cleaned = re.sub(r'(\s*)(\w+)(\s*):', r'\1"\2"\3:', cleaned)
+        
+        # 3. 移除末尾逗号
+        cleaned = re.sub(r',(\s*[}\]])', r'\1', cleaned)
+        
+        return cleaned
     
     def _create_fallback_signal(self, market_data: Dict) -> SignalData:
         """创建备用信号"""
