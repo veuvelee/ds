@@ -448,7 +448,7 @@ class RiskManager:
             if position:
                 current_balance = self._get_current_balance()
                 position_value = position['size'] * position['entry_price']
-                position_ratio = position_value / current_balance * 100
+                position_ratio = position_value / (current_balance + position_value) / 10 * 100
 
                 logger.info(f"position:{position} current_balance:{current_balance} position_value:{position_value} position_ratio:{position_ratio}")
                 
