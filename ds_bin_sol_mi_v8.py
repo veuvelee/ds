@@ -1781,7 +1781,7 @@ class EnhancedTradingBot:
             """
             
             self.dingtalk.send_message(
-                f"{emoji} SOL交易信号",
+                f"{emoji} SOL交易信号 - {signal_data.signal.value}",
                 message,
                 "signal"
             )
