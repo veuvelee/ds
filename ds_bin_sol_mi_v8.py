@@ -955,7 +955,7 @@ class AIAnalyzer:
         """分析市场并生成交易信号"""
         try:
             # 构建提示词
-            prompt = self._build_prompt(market_data, signal_history, position_info)
+            prompt = self._build_prompt2(market_data, signal_history, position_info)
             
             # 调用AI
             response = RetryManager.retry_operation(
@@ -981,6 +981,106 @@ class AIAnalyzer:
         except Exception as e:
             logger.error(f"AI分析异常: {e}")
             return self._create_fallback_signal(market_data)
+        
+    def _build_prompt2(self, market_data: Dict, signal_history: List, 
+                     position_info: Optional[Dict]) -> str:
+        """构建AI提示词2"""
+        technical_analysis = self._generate_technical_analysis(market_data)
+
+        # 历史信号
+        history_text = ""
+        if signal_history:
+            last_signal = signal_history[-1]
+            history_text = f"\n上次信号: {last_signal.signal.value} (信心: {last_signal.confidence.value})"
+        
+        # 持仓信息
+        position_text = "无持仓" if not position_info else f"{position_info['side']}仓, 数量: {position_info['size']}, 盈亏: {position_info['unrealized_pnl']:.2f}USDT"
+        pnl_text = f", 持仓盈亏: {position_info['unrealized_pnl']:.2f} USDT" if position_info else ""
+        
+
+        sentiment_data = self._get_sentiment_indicators()
+        if sentiment_data:
+            sign = '+' if sentiment_data['net_sentiment'] >= 0 else ''
+            sentiment_text = f"【SOL市场情绪】乐观{sentiment_data['positive_ratio']:.1%} 悲观{sentiment_data['negative_ratio']:.1%} 净值{sign}{sentiment_data['net_sentiment']:.3f}"
+        else:
+            sentiment_text = "【SOL市场情绪】数据暂不可用"
+
+        prompt = f"""
+        你是一个专业的加密货币交易分析师，最近波动频繁通过你交易的都亏麻了，已经吃不上饭了，多上点心吧，一定要注意短期波动呀，稳妥点呀。请基于以下SOL/USDT {self.config.timeframe}周期数据进行分析：
+
+        【当前行情】
+        - 价格: ${market_data.get('price', 0):.2f}
+        - 变化: {market_data.get('price_change', 0):+.2f}%
+        - 时间: {market_data.get('timestamp', 'N/A')}
+        - 成交量: {market_data.get('volume', 0):.0f} SOL
+        - 当前持仓: {position_text}{pnl_text}
+
+        【技术分析】
+        {technical_analysis}
+
+        【市场趋势】
+        - 整体趋势: {market_data.get('trend_analysis', {}).get('overall', 'N/A')}
+        - 短期趋势: {market_data.get('trend_analysis', {}).get('short_term', 'N/A')}
+        - RSI: {market_data.get('technical_data', {}).get('rsi', 50):.1f}
+        - MACD: {'看涨' if market_data.get('technical_data', {}).get('macd_hist', 0) > 0 else '看跌'}
+
+        【关键价位】
+        - 阻力: ${market_data.get('levels_analysis', {}).get('static_resistance', 0):.2f}
+        - 支撑: ${market_data.get('levels_analysis', {}).get('static_support', 0):.2f}
+        - ATR波动率: {market_data.get('technical_data', {}).get('atr', 0):.3f}
+
+        【交易历史】
+        {signal_history}
+
+        【市场情绪】
+        {sentiment_data}
+
+        【防频繁交易重要原则】
+        1. **趋势持续性优先**: 不要因单根K线或短期波动改变整体趋势判断
+        2. **持仓稳定性**: 除非趋势明确强烈反转，否则保持现有持仓方向
+        3. **反转确认**: 需要至少2-3个技术指标同时确认趋势反转才改变信号
+        4. **成本意识**: 减少不必要的仓位调整，每次交易都有成本
+
+        【交易指导原则 - 必须遵守】
+        1. **技术分析主导** (权重60%)：趋势、支撑阻力、K线形态是主要依据
+        2. **市场情绪辅助** (权重30%)：情绪数据用于验证技术信号，不能单独作为交易理由  
+        3. **风险管理** (权重10%)：考虑持仓、盈亏状况和止损位置
+        4. **趋势跟随**: 明确趋势出现时立即行动，不要过度等待
+        5. **SOL特性**: SOL波动性较大，需要更严格的风险控制
+        6. **信号明确性**:
+        - 强势上涨趋势 → BUY信号
+        - 强势下跌趋势 → SELL信号  
+        - 仅在窄幅震荡、无明确方向时 → HOLD信号
+        7. **技术指标权重**:
+        - 趋势(均线排列) > RSI > MACD > 布林带
+        - 价格突破关键支撑/阻力位是重要信号 
+
+        【智能仓位管理规则 - 必须遵守】
+        1. **减少过度保守**：
+        - 明确趋势中不要因轻微超买/超卖而过度HOLD
+        - RSI在30-70区间属于健康范围，不应作为主要HOLD理由
+        2. **趋势跟随优先**：
+        - 强势上涨趋势 + 任何RSI值 → 积极BUY信号
+        - 强势下跌趋势 + 任何RSI值 → 积极SELL信号
+        3. **SOL波动性考虑**：
+        - SOL波动较大，止损幅度可适当放宽
+        - 仓位控制要更加严格
+
+        【重要】请基于技术分析做出明确判断，避免因过度谨慎而错过趋势行情！
+
+        【分析要求】
+        基于以上分析，请给出明确的交易信号
+
+        请用以下JSON格式回复：
+        {{
+            "signal": "BUY|SELL|HOLD",
+            "reason": "详细分析理由",
+            "stop_loss": 具体止损价格,
+            "take_profit": 具体止盈价格,
+            "confidence": "HIGH|MEDIUM|LOW",
+            "risk_level": "LOW|MEDIUM|HIGH"
+        }}
+        """
     
     def _build_prompt(self, market_data: Dict, signal_history: List, 
                      position_info: Optional[Dict]) -> str:
@@ -1075,6 +1175,77 @@ class AIAnalyzer:
             logger.error(f"生成技术分析失败: {e}")
             return "技术分析数据不可用"
     
+    def _get_sentiment_indicators(self) -> Dict:
+        """获取情绪指标 - 针对SOL优化（如果API支持SOL）"""
+        try:
+            API_URL = "https://service.cryptoracle.network/openapi/v2/endpoint"
+            API_KEY = "7ad48a56-8730-4238-a714-eebc30834e3e"
+
+            # 获取最近4小时数据
+            end_time = datetime.now()
+            start_time = end_time - timedelta(hours=4)
+
+            request_body = {
+                "apiKey": API_KEY,
+                "endpoints": ["CO-A-02-01", "CO-A-02-02"],
+                "startTime": start_time.strftime("%Y-%m-%d %H:%M:%S"),
+                "endTime": end_time.strftime("%Y-%m-%d %H:%M:%S"),
+                "timeType": "15m",
+                "token": ["SOL"]  # 🆕 改为SOL
+            }
+
+            headers = {"Content-Type": "application/json", "X-API-KEY": API_KEY}
+            response = requests.post(API_URL, json=request_body, headers=headers)
+
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("code") == 200 and data.get("data"):
+                    time_periods = data["data"][0]["timePeriods"]
+
+                    for period in time_periods:
+                        period_data = period.get("data", [])
+
+                        sentiment = {}
+                        valid_data_found = False
+
+                        for item in period_data:
+                            endpoint = item.get("endpoint")
+                            value = item.get("value", "").strip()
+
+                            if value:
+                                try:
+                                    if endpoint in ["CO-A-02-01", "CO-A-02-02"]:
+                                        sentiment[endpoint] = float(value)
+                                        valid_data_found = True
+                                except (ValueError, TypeError):
+                                    continue
+
+                        if valid_data_found and "CO-A-02-01" in sentiment and "CO-A-02-02" in sentiment:
+                            positive = sentiment['CO-A-02-01']
+                            negative = sentiment['CO-A-02-02']
+                            net_sentiment = positive - negative
+
+                            data_delay = int((datetime.now() - datetime.strptime(
+                                period['startTime'], '%Y-%m-%d %H:%M:%S')).total_seconds() // 60)
+
+                            print(f"✅ 使用SOL情绪数据时间: {period['startTime']} (延迟: {data_delay}分钟)")
+
+                            return {
+                                'positive_ratio': positive,
+                                'negative_ratio': negative,
+                                'net_sentiment': net_sentiment,
+                                'data_time': period['startTime'],
+                                'data_delay_minutes': data_delay
+                            }
+
+                    print("❌ 所有时间段SOL情绪数据都为空")
+                    return None
+
+            return None
+        except Exception as e:
+            print(f"SOL情绪指标获取失败: {e}")
+            return None
+
     def _call_ai_api(self, prompt: str) -> Optional[str]:
         """调用AI API"""
         try:
