@@ -33,7 +33,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(f'logs/trading_bot_{datetime.now().strftime("%Y%m%d")}.log'),
+        logging.FileHandler(f'logs/out8.log'),
         logging.StreamHandler()
     ]
 )
@@ -1312,8 +1312,8 @@ class PositionManager:
             elif signal_data.signal == SignalType.HOLD:
                 logger.info("观望信号，不执行交易")
                 # 即使观望，也检查是否需要更新止盈止损
-                if current_position:
-                    self._update_orders(current_position, signal_data)
+                #if current_position:
+                    #self._update_orders(current_position, signal_data)
                 return
             
             # 设置止盈止损
