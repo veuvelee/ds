@@ -671,14 +671,14 @@ class OrderManager:
                 type='STOP_MARKET',
                 side=stop_side,
                 amount=amount,
+                price=None,
                 params={
                     'stopPrice': stop_price,
                     'closePosition': True,
-                    'workingType': 'MARK_PRICE',
+                    'workingType': 'CONTRACT_PRICE',
                     'priceProtect': True
                 }
             )
-            
             logger.info(f"止损订单创建成功: {stop_price}")
             return order
             
@@ -694,14 +694,13 @@ class OrderManager:
             
             order = self.exchange.create_order(
                 symbol=self.symbol,
-                type='TAKE_PROFIT_MARKET',
+                type='MARKET',
                 side=tp_side,
                 amount=amount,
+                price=None,
                 params={
-                    'stopPrice': take_profit_price,
-                    'closePosition': True,
-                    'workingType': 'MARK_PRICE',
-                    'priceProtect': True
+                    'takeProfitPrice': take_profit_price,
+                    'timeInForce': 'GTC'  # 一直有效直至取消
                 }
             )
             
