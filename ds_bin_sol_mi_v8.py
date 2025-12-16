@@ -958,7 +958,7 @@ class AIAnalyzer:
             # 构建提示词
             prompt = self._build_prompt2(market_data, signal_history, position_info)
 
-            logger.info(prompt)
+            # logger.info(prompt)
             
             # 调用AI
             response = RetryManager.retry_operation(
