@@ -999,14 +999,6 @@ class AIAnalyzer:
         # 持仓信息
         position_text = "无持仓" if not position_info else f"{position_info['side']}仓, 数量: {position_info['size']}, 盈亏: {position_info['unrealized_pnl']:.2f}USDT"
         pnl_text = f", 持仓盈亏: {position_info['unrealized_pnl']:.2f} USDT" if position_info else ""
-        
-
-        sentiment_data = self._get_sentiment_indicators()
-        if sentiment_data:
-            sign = '+' if sentiment_data['net_sentiment'] >= 0 else ''
-            sentiment_text = f"【SOL市场情绪】乐观{sentiment_data['positive_ratio']:.1%} 悲观{sentiment_data['negative_ratio']:.1%} 净值{sign}{sentiment_data['net_sentiment']:.3f}"
-        else:
-            sentiment_text = "【SOL市场情绪】数据暂不可用"
 
         prompt = f"""
         你是一个专业的加密货币交易分析师，最近波动频繁通过你交易的都亏麻了，已经吃不上饭了，多上点心吧，一定要注意短期波动呀，稳妥点呀。请基于以下SOL/USDT {self.config.timeframe}周期数据进行分析：
@@ -1034,9 +1026,6 @@ class AIAnalyzer:
 
         【交易历史】
         {signal_history}
-
-        【市场情绪】
-        {sentiment_data}
 
         【防频繁交易重要原则】
         1. **趋势持续性优先**: 不要因单根K线或短期波动改变整体趋势判断
@@ -1084,7 +1073,7 @@ class AIAnalyzer:
             "risk_level": "LOW|MEDIUM|HIGH"
         }}
         """
-        
+
         return prompt
     
     def _build_prompt(self, market_data: Dict, signal_history: List, 
@@ -1179,77 +1168,6 @@ class AIAnalyzer:
         except Exception as e:
             logger.error(f"生成技术分析失败: {e}")
             return "技术分析数据不可用"
-    
-    def _get_sentiment_indicators(self) -> Dict:
-        """获取情绪指标 - 针对SOL优化（如果API支持SOL）"""
-        try:
-            API_URL = "https://service.cryptoracle.network/openapi/v2/endpoint"
-            API_KEY = "7ad48a56-8730-4238-a714-eebc30834e3e"
-
-            # 获取最近4小时数据
-            end_time = datetime.now()
-            start_time = end_time - timedelta(hours=4)
-
-            request_body = {
-                "apiKey": API_KEY,
-                "endpoints": ["CO-A-02-01", "CO-A-02-02"],
-                "startTime": start_time.strftime("%Y-%m-%d %H:%M:%S"),
-                "endTime": end_time.strftime("%Y-%m-%d %H:%M:%S"),
-                "timeType": "15m",
-                "token": ["SOL"]  # 🆕 改为SOL
-            }
-
-            headers = {"Content-Type": "application/json", "X-API-KEY": API_KEY}
-            response = requests.post(API_URL, json=request_body, headers=headers)
-
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("code") == 200 and data.get("data"):
-                    time_periods = data["data"][0]["timePeriods"]
-
-                    for period in time_periods:
-                        period_data = period.get("data", [])
-
-                        sentiment = {}
-                        valid_data_found = False
-
-                        for item in period_data:
-                            endpoint = item.get("endpoint")
-                            value = item.get("value", "").strip()
-
-                            if value:
-                                try:
-                                    if endpoint in ["CO-A-02-01", "CO-A-02-02"]:
-                                        sentiment[endpoint] = float(value)
-                                        valid_data_found = True
-                                except (ValueError, TypeError):
-                                    continue
-
-                        if valid_data_found and "CO-A-02-01" in sentiment and "CO-A-02-02" in sentiment:
-                            positive = sentiment['CO-A-02-01']
-                            negative = sentiment['CO-A-02-02']
-                            net_sentiment = positive - negative
-
-                            data_delay = int((datetime.now() - datetime.strptime(
-                                period['startTime'], '%Y-%m-%d %H:%M:%S')).total_seconds() // 60)
-
-                            print(f"✅ 使用SOL情绪数据时间: {period['startTime']} (延迟: {data_delay}分钟)")
-
-                            return {
-                                'positive_ratio': positive,
-                                'negative_ratio': negative,
-                                'net_sentiment': net_sentiment,
-                                'data_time': period['startTime'],
-                                'data_delay_minutes': data_delay
-                            }
-
-                    print("❌ 所有时间段SOL情绪数据都为空")
-                    return None
-
-            return None
-        except Exception as e:
-            print(f"SOL情绪指标获取失败: {e}")
-            return None
 
     def _call_ai_api(self, prompt: str) -> Optional[str]:
         """调用AI API"""
@@ -1260,8 +1178,8 @@ class AIAnalyzer:
                     {"role": "system", "content": "你是一个专业的加密货币交易员，专注SOL/USDT永续合约交易。"},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.2,
-                max_tokens=500
+                stream=False,
+                temperature=0.1
             )
             result = response.choices[0].message.content
             logger.info(f"DeepSeek原始回复: {result}")
