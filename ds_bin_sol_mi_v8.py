@@ -947,8 +947,9 @@ class MarketDataFetcher:
 class AIAnalyzer:
     """AI分析器"""
     
-    def __init__(self, api_key: str, base_url: str = "https://api.deepseek.com"):
+    def __init__(self, api_key: str, base_url: str = "https://api.deepseek.com", config: TradeConfig = {}):
         self.client = OpenAI(api_key=api_key, base_url=base_url)
+        self.config = config
     
     def analyze_market(self, market_data: Dict, signal_history: List, 
                       position_info: Optional[Dict] = None) -> Optional[SignalData]:
@@ -1674,7 +1675,7 @@ class EnhancedTradingBot:
         self.exchange = self._init_exchange()
         
         # 初始化AI分析器
-        self.ai_analyzer = AIAnalyzer(api_key=os.getenv('DEEPSEEK_API_KEY'))
+        self.ai_analyzer = AIAnalyzer(api_key=os.getenv('DEEPSEEK_API_KEY'), config = self.config)
         
         # 初始化钉钉管理器
         self.dingtalk = DingTalkManager(
