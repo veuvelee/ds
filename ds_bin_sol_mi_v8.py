@@ -1084,6 +1084,8 @@ class AIAnalyzer:
             "risk_level": "LOW|MEDIUM|HIGH"
         }}
         """
+        
+        return prompt
     
     def _build_prompt(self, market_data: Dict, signal_history: List, 
                      position_info: Optional[Dict]) -> str:
