@@ -1131,7 +1131,7 @@ class AIAnalyzer:
         请给出明确的交易信号，使用以下JSON格式回复：
         {{
             "signal": "BUY|SELL|HOLD",
-            "reason": "详细分析理由",
+            "reason": "简要分析理由(包含趋势判断和技术依据)",
             "stop_loss": 具体止损价格,
             "take_profit": 具体止盈价格,
             "confidence": "HIGH|MEDIUM|LOW",
