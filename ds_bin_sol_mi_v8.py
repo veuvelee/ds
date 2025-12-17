@@ -1888,18 +1888,18 @@ class EnhancedTradingBot:
             {emoji} **交易信号: {signal_data.signal.value}**
             
             {confidence_emoji} **信心程度: {signal_data.confidence.value}**
-            ⚠️ **风险等级: {signal_data.risk_level.value}**
+            **⚠️ 风险等级: {signal_data.risk_level.value}**
             
-            📊 **市场信息:**
+            **📊 市场信息:**
             - 当前价格: ${price_data.get('price', 0):.2f}
             - 价格变化: {price_data.get('price_change', 0):+.2f}%
             - 趋势: {price_data.get('trend_analysis', {}).get('overall', 'N/A')}
             
-            🎯 **交易计划:**
+            **🎯 交易计划:**
             - 止损价格: ${signal_data.stop_loss:.2f}
             - 止盈价格: ${signal_data.take_profit:.2f}
             
-            📝 **分析理由:**
+            **📝 分析理由:**
             {signal_data.reason}
             """
             
@@ -1926,27 +1926,27 @@ class EnhancedTradingBot:
             
             # 构建状态报告
             status_report = f"""
-            📊 **交易状态报告** (周期: {self.cycle_count})
+            **📊 交易状态报告** (周期: {self.cycle_count})
             ==============================
             
-            💰 **账户状态:**
+            **💰 账户状态:**
             - 可用余额: ${balance.get('free', 0):.2f}
             - 总余额: ${balance.get('total', 0):.2f}
             - 日盈亏: {performance.get('daily_pnl', '0.00')}
             
-            📦 **持仓状态:**
+            **📦 持仓状态:**
             {f"- 方向: {position['side']}" if position else "- 无持仓"}
             {f"- 数量: {position['size']:.2f}张" if position else ""}
             {f"- 入场价: ${position['entry_price']:.2f}" if position else ""}
             {f"- 浮动盈亏: {position['unrealized_pnl']:.2f}" if position else ""}
             
-            📈 **交易绩效:**
+            **📈 交易绩效:**
             - 总交易: {performance.get('total_trades', 0)}
             - 胜率: {performance.get('win_rate', '0%')}
             - 盈亏比: {performance.get('profit_factor', '0.00')}
             - 连续亏损: {performance.get('consecutive_losses', 0)}
             
-            ⏰ **系统状态:**
+            **⏰ 系统状态:**
             - 运行周期: {self.cycle_count}
             - 最后信号: {self.signal_history[-1].signal.value if self.signal_history else 'N/A'}
             - 时间: {datetime.now().strftime('%H:%M:%S')}
@@ -1974,21 +1974,21 @@ class EnhancedTradingBot:
                 return
             
             report_message = f"""
-            📈 **交易绩效报告**
+            **📈 交易绩效报告**
             ==============================
             
-            🎯 **关键指标:**
+            **🎯 关键指标:**
             - 总交易次数: {performance.get('total_trades', 0)}
             - 胜率: {performance.get('win_rate', '0%')}
             - 盈亏比: {performance.get('profit_factor', '0.00')}
             - 总盈亏: {performance.get('total_pnl', '0.00')}
             
-            ⚠️ **风险状态:**
+            **⚠️ 风险状态:**
             - 连续亏损: {performance.get('consecutive_losses', 0)}
             - 日盈亏: {performance.get('daily_pnl', '0.00')}
             - 当前余额: {performance.get('current_balance', '0.00')}
             
-            📊 **运行统计:**
+            **📊 运行统计:**
             - 交易周期: {self.cycle_count}
             - 运行时间: {self._get_running_time()}
             - 信号数量: {len(self.signal_history)}
