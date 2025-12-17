@@ -1885,9 +1885,9 @@ class EnhancedTradingBot:
             confidence_emoji = confidence_emojis.get(signal_data.confidence, "⚪")
             
             message = f"""
-            {emoji} **交易信号: {signal_data.signal.value}**
+            **{emoji} 交易信号: {signal_data.signal.value}**
             
-            {confidence_emoji} **信心程度: {signal_data.confidence.value}**
+            **{confidence_emoji}信心程度: {signal_data.confidence.value}**
             **⚠️ 风险等级: {signal_data.risk_level.value}**
             
             **📊 市场信息:**
